@@ -412,7 +412,7 @@ window.onload = function() {
   document.getElementById('signin-page').style.display = 'flex';
   if (!_gisInited) {
     _gisInited = true;
-    google.accounts.id.initialize({ client_id: '990583974585-urcqsg4igf0m4r42h3srhr7qeodk6uk0.apps.googleusercontent.com', callback: handleCredentialResponse, auto_select: true, use_fedcm_for_prompt: true });
+    google.accounts.id.initialize({ client_id: '990583974585-urcqsg4igf0m4r42h3srhr7qeodk6uk0.apps.googleusercontent.com', callback: handleCredentialResponse, auto_select: true });
     google.accounts.id.renderButton(document.querySelector('.g_id_signin'), { type: 'standard', size: 'large', theme: 'outline', text: 'sign_in_with', shape: 'rectangular', logo_alignment: 'left' });
   }
 };
@@ -447,10 +447,64 @@ function showToast(msg, type) {
 }
 
 // --- Load / Filter ---
+function mapOrderToTxn(o) {
+  return {
+    id: 'ORD-' + o.id,
+    txn_ref: o.order_ref || o.id,
+    order_ref: o.order_ref || '',
+    buy_direct: 'yes',
+    supplier: o.supplier_company || o.supplier_name || '',
+    supplier_country: o.supplier_country || '',
+    intermediary: '',
+    intermediary_price: '',
+    buy_price: o.supplier_price || '',
+    buy_currency: o.currency || '',
+    buy_payment_terms: o.payment_terms || '',
+    buyer: o.buyer_company || o.buyer_name || '',
+    buyer_country: o.buyer_country || '',
+    sell_price: o.buyer_price || '',
+    sell_currency: o.currency || '',
+    sell_payment_terms: o.payment_terms || '',
+    material: o.material || '',
+    qty: o.qty || '',
+    unit: o.unit || 'MT',
+    incoterms: o.incoterms || '',
+    vessel: o.vessel_name || '',
+    container: o.container_number || '',
+    bl: o.bl_number || '',
+    port_loading: o.loading_port || '',
+    port_discharge: o.discharge_port || '',
+    etd: o.etd || '',
+    eta: o.eta || '',
+    stage: 'Confirmation',
+    rag: 'grey',
+    assigned_to: o.created_by || '',
+    notes: o.notes || '',
+    docs_total: 0,
+    docs_approved: 0,
+    created_by: o.created_by || '',
+    created_at: o.created_at || '',
+    updated_at: o.updated_at || '',
+    _from_lead_tracker: true
+  };
+}
+
 let _fetchPromise = null;
 async function fetchTransactions() {
   if (_fetchPromise) return _fetchPromise;
-  _fetchPromise = api('getImportTransactions', {}).then(r => { _fetchPromise = null; return r; }).catch(e => { _fetchPromise = null; throw e; });
+  _fetchPromise = Promise.all([
+    api('getImportTransactions', {}),
+    api('getOrders', { status: 'Confirmed' })
+  ]).then(function([impR, ordR]) {
+    _fetchPromise = null;
+    const impTxns = (impR && impR.transactions) ? impR.transactions : [];
+    const orders = (ordR && ordR.orders) ? ordR.orders : [];
+    const impIds = new Set(impTxns.map(function(t) { return t.order_ref; }));
+    const fromOrders = orders
+      .filter(function(o) { return !impIds.has(o.order_ref); })
+      .map(mapOrderToTxn);
+    return { transactions: impTxns.concat(fromOrders) };
+  }).catch(function(e) { _fetchPromise = null; throw e; });
   return _fetchPromise;
 }
 
