@@ -494,7 +494,7 @@ async function fetchTransactions() {
   if (_fetchPromise) return _fetchPromise;
   _fetchPromise = Promise.all([
     api('getImportTransactions', {}),
-    api('getOrders', { status: 'Confirmed' })
+    api('getOrders', {})
   ]).then(function([impR, ordR]) {
     _fetchPromise = null;
     const impTxns = (impR && impR.transactions) ? impR.transactions : [];
