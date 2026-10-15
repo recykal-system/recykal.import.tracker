@@ -500,7 +500,7 @@ function renderTable(txns) {
     const docsApproved = parseInt(t.docs_approved||0);
     const docsHtml = docsTotal ? (docsApproved+'/'+docsTotal+' docs') : '—';
     const supplierDisplay = t.buy_direct==='no' ? (t.supplier||'—') + ' <span style="font-size:10px;color:#94a3b8">(via '+esc(t.intermediary||'3P')+')</span>' : esc(t.supplier||'—');
-    return '<tr onclick="openTxn(\''+t.id+\')">' +
+    return '<tr onclick="openTxn(\''+t.id+'\')">' +
       '<td><span class="rag rag-'+rag+'" title="'+rag.charAt(0).toUpperCase()+rag.slice(1)+'"></span></td>' +
       '<td><strong>'+esc(t.txn_ref||'—')+'</strong></td>' +
       '<td style="font-size:11px;color:#64748b">'+esc(t.order_ref||'—')+'</td>' +
