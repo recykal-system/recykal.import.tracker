@@ -371,7 +371,7 @@ const PARTY_TYPES = ['CHA','Freight Forwarder','Inspection Agency','Shipping Lin
 const COST_TYPES = ['CHA','Freight / Shipping','Insurance Premium','Import Duty','Inspection Fee','Port Charges','THC','Demurrage','Detention','Labour','Handling','Loading','Unloading','Crane','JCB','Hydra','Testing','Third Party Fee','Bank Charges','Other'];
 const PAY_TYPES = ['Advance','Part Payment','Balance','LC at Sight','CAD','DA','DP','Post Clearance'];
 
-// ─── Auth ───
+// --- Auth ---
 function handleCredentialResponse(response) {
   const payload = JSON.parse(atob(response.credential.split('.')[1]));
   if (!payload.email || !payload.email.endsWith('@' + ALLOWED_DOMAIN)) {
@@ -417,7 +417,7 @@ window.onload = function() {
   }
 };
 
-// ─── API ───
+// --- API ---
 async function api(action, data, _retry) {
   data = data || {};
   const url = API_URL + '?action=' + action + '&token=' + encodeURIComponent(currentToken) + '&data=' + encodeURIComponent(JSON.stringify(data));
@@ -446,7 +446,7 @@ function showToast(msg, type) {
   t._timer = setTimeout(()=>{ t.style.opacity='0'; }, 2800);
 }
 
-// ─── Load / Filter ───
+// --- Load / Filter ---
 let _fetchPromise = null;
 async function fetchTransactions() {
   if (_fetchPromise) return _fetchPromise;
@@ -517,7 +517,7 @@ function renderTable(txns) {
   }).join('');
 }
 
-// ─── Open Transaction ───
+// --- Open Transaction ---
 async function openTxn(id) {
   currentTxn = allTransactions.find(t=>t.id===id);
   if (!currentTxn) return;
@@ -565,7 +565,7 @@ function closePanel() {
   currentTxn = null;
 }
 
-// ─── Panel Tabs ───
+// --- Panel Tabs ---
 function switchPanelTab(tab) {
   currentPanelTab = tab;
   ['overview','timeline','documents','payments','costs'].forEach(t=>{
@@ -585,7 +585,7 @@ function renderPanelTab(tab) {
   else if (tab === 'costs') renderCosts(t, cache.costs||[]);
 }
 
-// ─── Overview ───
+// --- Overview ---
 function renderOverview(t, cache) {
   const buyPrice = parseFloat(t.buy_price||0);
   const sellPrice = parseFloat(t.sell_price||0);
@@ -657,7 +657,7 @@ async function addRemark() {
   else showToast('Error: '+(res.error||'unknown'), 'error');
 }
 
-// ─── Timeline ───
+// --- Timeline ---
 function renderTimeline(t, timeline) {
   const stageOrder = ['Confirmation','Loading','Shipping','Reaches India','Clearance'];
   const currentStageIdx = stageOrder.indexOf(t.stage);
@@ -729,7 +729,7 @@ async function saveTimeline() {
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
 }
 
-// ─── Documents ───
+// --- Documents ---
 function renderDocuments(t, docs) {
   const approved = docs.filter(d=>d.status==='Approved').length;
   const changesReq = docs.filter(d=>d.status==='Changes Requested').length;
@@ -916,7 +916,7 @@ async function saveDocs() {
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
 }
 
-// ─── Payments ───
+// --- Payments ---
 function renderPayments(t, payments) {
   const buyPayments  = payments.filter(p=>p.leg==='buy');
   const sellPayments = payments.filter(p=>p.leg==='sell');
@@ -1010,7 +1010,7 @@ async function savePayment(leg) {
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
 }
 
-// ─── Costs ───
+// --- Costs ---
 function renderCosts(t, costs) {
   const totalCosts = costs.reduce((s,c)=>s+parseFloat(c.amount||0),0);
   const sellPrice = parseFloat(t.sell_price||0);
@@ -1095,7 +1095,7 @@ async function deleteCost(costId, idx) {
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
 }
 
-// ─── Edit Overview ───
+// --- Edit Overview ---
 function openEditOverview() {
   const t = currentTxn;
   document.getElementById('panel-body').innerHTML =
@@ -1187,7 +1187,7 @@ async function saveEditOverview() {
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
 }
 
-// ─── Add Transaction Modal ───
+// --- Add Transaction Modal ---
 function openAddModal() {
   document.getElementById('add-error').style.display = 'none';
   document.getElementById('add-modal').classList.add('open');
@@ -1262,7 +1262,7 @@ async function saveTransaction() {
   }
 }
 
-// ─── Dashboard ───
+// --- Dashboard ---
 async function loadDashboard() {
   if (!allTransactions.length) { try { const r = await fetchTransactions(); allTransactions = r.transactions||[]; } catch(e){} }
   renderDashboard();
@@ -1318,7 +1318,7 @@ function kpi(label, value) {
   return '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:6px">'+label+'</div><div style="font-size:28px;font-weight:800;color:#1e3a5f;line-height:1">'+value+'</div></div>';
 }
 
-// ─── Tab switching ───
+// --- Tab switching ---
 function switchTab(tab) {
   ['transactions','dashboard'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('active', t===tab));
   document.getElementById('filters-bar').style.display    = tab==='transactions' ? 'flex' : 'none';
@@ -1328,7 +1328,7 @@ function switchTab(tab) {
   else loadTransactions();
 }
 
-// ─── Utils ───
+// --- Utils ---
 function esc(str) {
   if (str===null||str===undefined) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
