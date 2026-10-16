@@ -357,7 +357,25 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzjWcvonf3XxXWMF3S7ARt2
 const ALLOWED_DOMAIN = 'recykal.com';
 let currentToken = '', currentUser = '';
 let allTransactions = [], currentTxn = null, currentPanelTab = 'overview';
-let txnCache = {}; // id -> {docs, payments, costs, timeline}
+let txnCache = {}; // id -> {docs, payments, costs, timeline, lineItems}
+const TXN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function saveTxnCache(id) {
+  try { localStorage.setItem('imp_txn_'+id, JSON.stringify({data: txnCache[id], ts: Date.now()})); } catch(e) {}
+}
+function loadTxnCache(id) {
+  try {
+    const raw = localStorage.getItem('imp_txn_'+id);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (Date.now() - entry.ts > TXN_CACHE_TTL) { localStorage.removeItem('imp_txn_'+id); return null; }
+    return entry.data;
+  } catch(e) { return null; }
+}
+function invalidateTxnCache(id) {
+  delete txnCache[id];
+  try { localStorage.removeItem('imp_txn_'+id); } catch(e) {}
+}
 
 const TEAM = ['Iqbal Naseem','Prafulla Chandra','Rounak Jindal','Mayank Dixit','Kuldeep Jain','Kunal Miglani','Pritesh Makwana','Mayank Sanwal'];
 const STAGES = ['Confirmation','Loading','Shipping','Reaches India','Clearance','Completed','Cancelled'];
@@ -633,10 +651,18 @@ async function openTxn(id) {
   ['overview','timeline','documents','payments','costs'].forEach(t=>{
     document.getElementById('ptab-'+t).classList.toggle('active', t==='overview');
   });
-  document.getElementById('panel-body').innerHTML = '<div style="padding:20px;color:#94a3b8"><span class="spinner"></span> Loading…</div>';
-  // Fetch all detail if not cached
+  // Restore from localStorage immediately (instant render), then refresh in background
   if (!txnCache[id]) {
-    // Promoted txns: data may be stored under original ORD-uuid
+    const persisted = loadTxnCache(id);
+    if (persisted) { txnCache[id] = persisted; }
+  }
+  if (txnCache[id]) {
+    renderPanelTab('overview'); // instant — cached data
+  } else {
+    document.getElementById('panel-body').innerHTML = '<div style="padding:20px;color:#94a3b8"><span class="spinner"></span> Loading…</div>';
+  }
+  // Always refresh from network in background (updates cache silently)
+  (async function() {
     const origOrdForData = currentTxn._orig_ord_id || orderRefToOrdUuid[currentTxn.order_ref];
     const dataId = id;
     const fallbackId = (origOrdForData && origOrdForData !== id) ? origOrdForData : null;
@@ -647,7 +673,6 @@ async function openTxn(id) {
       api('getImportTimeline',  {txn_id: dataId}),
       api('getImportLineItems', {txn_id: dataId})
     ]);
-    // Merge from original ORD- id if any data was stored there
     let payments = pr.payments || [];
     let costs = cr.costs || [];
     if (fallbackId) {
@@ -659,7 +684,6 @@ async function openTxn(id) {
       costs    = costs.concat(cr2.costs || []);
     }
     let docs = dr.docs || [];
-    // Add any new doc types missing from older saved sets
     if (docs.length) {
       const existingNames = new Set(docs.map(d=>d.name));
       const missing = DOC_TYPES.filter(n=>!existingNames.has(n)).map(n=>({name:n,status:'Pending',reviewer:'',expected_date:'',received_date:'',notes:'',txn_id:id}));
@@ -670,12 +694,15 @@ async function openTxn(id) {
     }
     txnCache[id] = {
       docs: docs.length ? docs : initDocs(),
-      payments,
-      costs,
+      payments, costs,
       timeline: tr.timeline || initTimeline(),
       lineItems: lr.items || []
     };
-  }
+    saveTxnCache(id);
+    // Re-render only if this transaction is still open
+    if (currentTxn && currentTxn.id === id) renderPanelTab(currentPanelTab);
+  })();
+  if (!txnCache[id]) { /* wait for async above */ return; }
   renderPanelTab('overview');
 }
 
@@ -706,11 +733,14 @@ function switchPanelTab(tab) {
 function renderPanelTab(tab) {
   const t = currentTxn;
   const cache = txnCache[t.id] || {};
+  currentPanelTab = tab;
   if (tab === 'overview') renderOverview(t, cache);
   else if (tab === 'timeline') renderTimeline(t, cache.timeline||[]);
   else if (tab === 'documents') renderDocuments(t, cache.docs||[]);
   else if (tab === 'payments') renderPayments(t, cache.payments||[]);
   else if (tab === 'costs') renderCosts(t, cache.costs||[]);
+  // Persist latest cache state after every render
+  if (txnCache[t.id]) saveTxnCache(t.id);
 }
 
 // --- Overview ---
