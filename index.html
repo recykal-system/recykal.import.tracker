@@ -595,8 +595,22 @@ async function openTxn(id) {
       api('getImportCosts',   {txn_id: id}),
       api('getImportTimeline',{txn_id: id})
     ]);
+    let docs = dr.docs || [];
+    // For lead-tracker orders with no saved docs, seed them now
+    if (!docs.length) {
+      const seed = initDocs();
+      await api('updateImportDocs', {txn_id: id, docs: JSON.stringify(seed), by: currentUser});
+      docs = seed;
+    }
+    // Add any new doc types missing from older saved sets
+    const existingNames = new Set(docs.map(d=>d.name));
+    const missing = DOC_TYPES.filter(n=>!existingNames.has(n)).map(n=>({name:n,status:'Pending',reviewer:'',expected_date:'',received_date:'',notes:'',txn_id:id}));
+    if (missing.length) {
+      docs = docs.concat(missing);
+      await api('updateImportDocs', {txn_id: id, docs: JSON.stringify(docs), by: currentUser});
+    }
     txnCache[id] = {
-      docs:     dr.docs     || initDocs(),
+      docs,
       payments: pr.payments || [],
       costs:    cr.costs    || [],
       timeline: tr.timeline || initTimeline()
