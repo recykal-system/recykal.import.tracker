@@ -686,6 +686,17 @@ function renderOverview(t, cache) {
     (totalNetMargin!==null?'<tr><td style="color:#64748b;padding:3px 0">Total Net ('+esc(t.qty)+' '+esc(t.unit||'MT')+')</td><td style="text-align:right;font-weight:700;color:'+(totalNetMargin>=0?'#166534':'#991b1b')+'">'+totalNetMargin.toFixed(0)+'</td></tr>':'')+
     '</table>' +
     '</div>' +
+    '<div class="panel-section">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Drive Links</h3><button class="btn-sm" onclick="openAddDealLink()">+ Add Link</button></div>' +
+    '<div id="deal-links-list" style="margin-bottom:6px"></div>' +
+    '<div id="add-deal-link-form" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:10px;margin-top:6px">' +
+    '<div class="form-grid" style="margin-bottom:8px">' +
+    '<div class="form-group"><label>Label</label><input id="deal-link-label" placeholder="e.g. Sales Contract v2" style="font-size:12px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:4px;width:100%" /></div>' +
+    '<div class="form-group"><label>Google Drive URL</label><input id="deal-link-url" placeholder="https://drive.google.com/..." style="font-size:12px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:4px;width:100%" /></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px"><button class="btn-cancel" onclick="closeAddDealLink()">Cancel</button><button class="btn-save" onclick="saveDealLink()">Save</button></div>' +
+    '</div>' +
+    '</div>' +
     '<div class="panel-section"><h3>Remarks</h3>' +
     '<div id="remarks-list" style="max-height:200px;overflow-y:auto;margin-bottom:8px"></div>' +
     '<div style="display:flex;gap:6px"><input type="text" id="remark-input" placeholder="Add a remark…" style="flex:1;border:1px solid #e2e8f0;border-radius:5px;padding:6px 9px;font-size:12px" onkeydown="if(event.key===\'Enter\')addRemark()" /><button class="btn-save" onclick="addRemark()">Add</button></div>' +
@@ -695,10 +706,33 @@ function renderOverview(t, cache) {
 
 async function loadRemarks() {
   const res = await api('getImportRemarks', {txn_id: currentTxn.id});
-  const remarks = res.remarks || [];
-  const el = document.getElementById('remarks-list');
-  if (!el) return;
-  el.innerHTML = remarks.length ? remarks.map(r=>'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:7px 10px;margin-bottom:6px"><p style="font-size:12px">'+esc(r.remark)+'</p><div style="font-size:10px;color:#94a3b8;margin-top:3px"><strong style="color:#475569">'+esc(r.added_by||'—')+'</strong> · '+fmtDate(r.created_at)+'</div></div>').join('') : '<span style="color:#94a3b8;font-size:12px">No remarks yet.</span>';
+  const all = res.remarks || [];
+  const links = all.filter(r => r.remark.startsWith('[L]::'));
+  const remarks = all.filter(r => !r.remark.startsWith('[L]::') && !r.remark.startsWith('[DL::'));
+  const rEl = document.getElementById('remarks-list');
+  if (rEl) rEl.innerHTML = remarks.length ? remarks.map(r=>'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:7px 10px;margin-bottom:6px"><p style="font-size:12px">'+esc(r.remark)+'</p><div style="font-size:10px;color:#94a3b8;margin-top:3px"><strong style="color:#475569">'+esc(r.added_by||'—')+'</strong> · '+fmtDate(r.created_at)+'</div></div>').join('') : '<span style="color:#94a3b8;font-size:12px">No remarks yet.</span>';
+  const lEl = document.getElementById('deal-links-list');
+  if (lEl) lEl.innerHTML = links.length ? links.map(r => {
+    const parts = r.remark.slice(5).split('::');
+    const label = parts[0] || 'Link'; const url = parts[1] || '#';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9">' +
+      '<span style="font-size:14px">📎</span>' +
+      '<a href="'+esc(url)+'" target="_blank" style="font-size:12px;color:#1d4ed8;text-decoration:none;font-weight:600;flex:1">'+esc(label)+'</a>' +
+      '<span style="font-size:10px;color:#94a3b8">'+esc(r.added_by||'')+'</span>' +
+      '</div>';
+  }).join('') : '<span style="color:#94a3b8;font-size:12px">No links yet.</span>';
+}
+
+function openAddDealLink() { document.getElementById('add-deal-link-form').style.display='block'; }
+function closeAddDealLink() { document.getElementById('add-deal-link-form').style.display='none'; document.getElementById('deal-link-label').value=''; document.getElementById('deal-link-url').value=''; }
+async function saveDealLink() {
+  const label = (document.getElementById('deal-link-label').value||'').trim();
+  const url = (document.getElementById('deal-link-url').value||'').trim();
+  if (!url) { showToast('URL is required','error'); return; }
+  const remark = '[L]::' + (label||'Link') + '::' + url;
+  const res = await api('addImportRemark', {txn_id: currentTxn.id, remark, by: currentUser});
+  if (res.success) { closeAddDealLink(); loadRemarks(); showToast('Link saved'); }
+  else showToast('Error: '+(res.error||'unknown'),'error');
 }
 
 async function addRemark() {
@@ -824,6 +858,21 @@ function renderDocuments(t, docs) {
         '<button class="btn-sm" style="background:#dbeafe;border-color:#93c5fd;color:#1d4ed8" onclick="openDocAction(\''+esc(d.name)+'\',\'resubmit\')">↑ Mark Resubmitted</button>' +
         '<button class="btn-sm" style="background:#f1f5f9;border-color:#e2e8f0;color:#475569" onclick="openDocAction(\''+esc(d.name)+'\',\'closed\')">✗ Close</button>' +
         '</div>' +
+        // Drive links for this doc
+        '<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
+        '<span style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px">Drive Links</span>' +
+        '<button class="btn-sm" style="font-size:10px;padding:2px 8px" onclick="openAddDocLink(\''+esc(d.name)+'\','+i+')">+ Add</button>' +
+        '</div>' +
+        '<div id="doc-links-'+i+'"><span style="color:#94a3b8;font-size:11px">Loading…</span></div>' +
+        '<div id="doc-link-form-'+i+'" style="display:none;margin-top:6px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px">' +
+        '<div class="form-grid" style="margin-bottom:6px">' +
+        '<div class="form-group"><label>Label</label><input id="dlink-label-'+i+'" placeholder="e.g. Draft BL v1" style="font-size:11px;padding:4px 7px;border:1px solid #e2e8f0;border-radius:4px;width:100%" /></div>' +
+        '<div class="form-group"><label>Google Drive URL</label><input id="dlink-url-'+i+'" placeholder="https://drive.google.com/..." style="font-size:11px;padding:4px 7px;border:1px solid #e2e8f0;border-radius:4px;width:100%" /></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px"><button class="btn-cancel" style="font-size:11px;padding:3px 10px" onclick="closeAddDocLink('+i+')">Cancel</button><button class="btn-save" style="font-size:11px;padding:3px 10px" onclick="saveDocLink(\''+esc(d.name)+'\','+i+')">Save</button></div>' +
+        '</div>' +
+        '</div>' +
         // Review history
         '<div id="rev-log-'+i+'" style="margin-top:4px"></div>' +
         '<div id="doc-action-form-'+i+'" style="display:none"></div>' +
@@ -836,7 +885,57 @@ function renderDocuments(t, docs) {
 
 function toggleDocDetail(id) {
   const el = document.getElementById(id);
-  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (!el) return;
+  const opening = el.style.display === 'none';
+  el.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    const idx = id.replace('doc-detail-','');
+    loadDocLinks(idx);
+  }
+}
+
+let _docLinksCache = {};
+async function loadDocLinks(idx) {
+  const el = document.getElementById('doc-links-'+idx);
+  if (!el) return;
+  if (!_docLinksCache[currentTxn.id]) {
+    const res = await api('getImportRemarks', {txn_id: currentTxn.id});
+    _docLinksCache[currentTxn.id] = (res.remarks||[]).filter(r => r.remark.startsWith('[DL::'));
+  }
+  const allDocLinks = _docLinksCache[currentTxn.id];
+  const docName = el.closest('[id^="doc-detail-"]') ? null : null;
+  // Match by idx from the DOM
+  const detailEl = document.getElementById('doc-detail-'+idx);
+  const nameEl = detailEl ? detailEl.previousElementSibling : null;
+  const name = nameEl ? (nameEl.querySelector('strong')||{}).textContent : '';
+  const prefix = '[DL::' + name + ']::';
+  const links = allDocLinks.filter(r => r.remark.startsWith(prefix));
+  el.innerHTML = links.length ? links.map(r => {
+    const rest = r.remark.slice(prefix.length);
+    const sep = rest.indexOf('::');
+    const label = sep>=0 ? rest.slice(0,sep) : rest;
+    const url   = sep>=0 ? rest.slice(sep+2) : '#';
+    return '<div style="display:flex;align-items:center;gap:6px;padding:3px 0">' +
+      '<span style="font-size:12px">📎</span>' +
+      '<a href="'+esc(url)+'" target="_blank" style="font-size:11px;color:#1d4ed8;text-decoration:none;font-weight:600;flex:1">'+esc(label)+'</a>' +
+      '</div>';
+  }).join('') : '<span style="color:#94a3b8;font-size:11px">No links yet.</span>';
+}
+
+function openAddDocLink(docName, idx) { document.getElementById('doc-link-form-'+idx).style.display='block'; }
+function closeAddDocLink(idx) { document.getElementById('doc-link-form-'+idx).style.display='none'; document.getElementById('dlink-label-'+idx).value=''; document.getElementById('dlink-url-'+idx).value=''; }
+async function saveDocLink(docName, idx) {
+  const label = (document.getElementById('dlink-label-'+idx).value||'').trim();
+  const url   = (document.getElementById('dlink-url-'+idx).value||'').trim();
+  if (!url) { showToast('URL is required','error'); return; }
+  const remark = '[DL::'+docName+']::' + (label||'Link') + '::' + url;
+  const res = await api('addImportRemark', {txn_id: currentTxn.id, remark, by: currentUser});
+  if (res.success) {
+    delete _docLinksCache[currentTxn.id];
+    closeAddDocLink(idx);
+    loadDocLinks(idx);
+    showToast('Link saved');
+  } else showToast('Error: '+(res.error||'unknown'),'error');
 }
 
 async function loadDocReviews(txnId, docs) {
