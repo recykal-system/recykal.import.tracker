@@ -858,7 +858,25 @@ async function saveTimeline() {
 }
 
 // --- Documents ---
-function renderDocuments(t, docs) {
+async function renderDocuments(t, docs) {
+  // Load review history first and derive status from it (source of truth)
+  const statusMap = {accepted:'Approved', changes:'Changes Requested', resubmit:'Resubmitted', closed:'Not Required'};
+  if (!docReviewCache[t.id]) {
+    const res = await api('getImportDocReviews', {txn_id: t.id});
+    docReviewCache[t.id] = {};
+    (res.reviews||[]).forEach(function(r) {
+      if (!docReviewCache[t.id][r.doc_name]) docReviewCache[t.id][r.doc_name] = [];
+      docReviewCache[t.id][r.doc_name].push(r);
+    });
+  }
+  // Override doc status from latest review action
+  docs = docs.map(function(d) {
+    const reviews = (docReviewCache[t.id] && docReviewCache[t.id][d.name]) || [];
+    if (!reviews.length) return d;
+    const latest = reviews[reviews.length - 1];
+    const derivedStatus = statusMap[latest.action];
+    return derivedStatus ? Object.assign({}, d, {status: derivedStatus}) : d;
+  });
   const approved = docs.filter(d=>d.status==='Approved').length;
   const changesReq = docs.filter(d=>d.status==='Changes Requested').length;
   document.getElementById('panel-body').innerHTML =
@@ -919,7 +937,7 @@ function renderDocuments(t, docs) {
         '</div></div>';
     }).join('') +
     '</div>';
-  // Load review history for all docs
+  // Render review history (cache already loaded above)
   loadDocReviews(t.id, docs);
 }
 
