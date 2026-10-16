@@ -654,7 +654,12 @@ async function openTxn(id) {
   // Restore from localStorage immediately (instant render), then refresh in background
   if (!txnCache[id]) {
     const persisted = loadTxnCache(id);
-    if (persisted) { txnCache[id] = persisted; }
+    // Discard cached entry if docs are empty — forces a fresh network fetch
+    if (persisted && persisted.docs && persisted.docs.length > 0) {
+      txnCache[id] = persisted;
+    } else if (persisted) {
+      try { localStorage.removeItem('imp_txn_'+id); } catch(e) {}
+    }
   }
   if (txnCache[id]) {
     renderPanelTab('overview'); // instant — cached data
@@ -666,12 +671,13 @@ async function openTxn(id) {
     const origOrdForData = currentTxn._orig_ord_id || orderRefToOrdUuid[currentTxn.order_ref];
     const dataId = id;
     const fallbackId = (origOrdForData && origOrdForData !== id) ? origOrdForData : null;
+    const safe = fn => fn.catch(() => ({}));
     const [dr, pr, cr, tr, lr] = await Promise.all([
-      api('getImportDocs',      {txn_id: dataId}),
-      api('getImportPayments',  {txn_id: dataId}),
-      api('getImportCosts',     {txn_id: dataId}),
-      api('getImportTimeline',  {txn_id: dataId}),
-      api('getImportLineItems', {txn_id: dataId})
+      safe(api('getImportDocs',      {txn_id: dataId})),
+      safe(api('getImportPayments',  {txn_id: dataId})),
+      safe(api('getImportCosts',     {txn_id: dataId})),
+      safe(api('getImportTimeline',  {txn_id: dataId})),
+      safe(api('getImportLineItems', {txn_id: dataId}))
     ]);
     let payments = pr.payments || [];
     let costs = cr.costs || [];
@@ -692,8 +698,9 @@ async function openTxn(id) {
         await api('updateImportDocs', {txn_id: id, docs: JSON.stringify(docs), by: currentUser});
       }
     }
+    const freshDocs = docs.length ? docs : initDocs();
     txnCache[id] = {
-      docs: docs.length ? docs : initDocs(),
+      docs: freshDocs,
       payments, costs,
       timeline: tr.timeline || initTimeline(),
       lineItems: lr.items || []
