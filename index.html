@@ -1198,12 +1198,13 @@ function renderPayments(t, payments) {
   const buyTotal  = buyPayments.reduce((s,p)=>s+parseFloat(p.amount||0),0);
   const sellTotal = sellPayments.reduce((s,p)=>s+parseFloat(p.amount||0),0);
 
-  function payList(pays) {
-    return pays.length ? pays.map(function(p) {
+  function payList(pays, leg) {
+    return pays.length ? pays.map(function(p, i) {
       const isPaid = !!p.paid_date;
       const isOverdue = p.due_date && !isPaid && new Date(p.due_date) < new Date();
-      return '<div class="pay-item">' +
-        '<div>' +
+      const pid = esc(p.id||'');
+      return '<div class="pay-item" id="pay-item-'+pid+'">' +
+        '<div style="flex:1">' +
         '<div class="pay-amount">'+esc(p.currency||'USD')+' '+parseFloat(p.amount||0).toLocaleString()+(p.currency&&p.currency!=='INR'&&p.conversion_rate?' <span style="font-size:11px;color:#64748b;font-weight:400">@ ₹'+parseFloat(p.conversion_rate).toFixed(2)+'</span>':'')+'</div>' +
         '<div class="pay-meta"><strong>'+esc(p.type||'Payment')+'</strong>' +
         (p.party?' · To/From: '+esc(p.party):'') +
@@ -1212,8 +1213,11 @@ function renderPayments(t, payments) {
         (p.reference?' · Ref: '+esc(p.reference):'') +
         (p.notes?' · '+esc(p.notes):'') +
         '</div></div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
         '<div class="'+(isPaid?'pay-status-paid':isOverdue?'pay-status-due':'pay-status-pending')+'">'+(isPaid?'✓ Paid':isOverdue?'⚠ Overdue':'Pending')+'</div>' +
-        '</div>';
+        '<button class="btn-sm" onclick="openEditPayment(\''+pid+'\')" style="padding:3px 8px;font-size:11px">Edit</button>' +
+        '</div></div>' +
+        '<div id="pay-edit-'+pid+'" style="display:none;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px;margin:4px 0 8px"></div>';
     }).join('') : '<div style="color:#94a3b8;font-size:12px;padding:4px 0">No payments recorded.</div>';
   }
 
@@ -1223,7 +1227,7 @@ function renderPayments(t, payments) {
     '<h3 style="margin:0">Buy Leg Payments</h3>' +
     '<button class="btn-sm primary" onclick="openAddPayment(\'buy\')">+ Add</button>' +
     '</div>' +
-    payList(buyPayments) +
+    payList(buyPayments,'buy') +
     (buyPayments.length?'<div class="pay-total"><span>Total Paid (Buy)</span><span>'+esc(t.buy_currency||'USD')+' '+buyTotal.toLocaleString()+'</span></div>':'') +
     '</div>' +
     '<div class="panel-section">' +
@@ -1231,7 +1235,7 @@ function renderPayments(t, payments) {
     '<h3 style="margin:0">Sell Leg Payments</h3>' +
     '<button class="btn-sm primary" onclick="openAddPayment(\'sell\')">+ Add</button>' +
     '</div>' +
-    payList(sellPayments) +
+    payList(sellPayments,'sell') +
     (sellPayments.length?'<div class="pay-total"><span>Total Received (Sell)</span><span>'+esc(t.sell_currency||'USD')+' '+sellTotal.toLocaleString()+'</span></div>':'') +
     '</div>' +
     '<div id="add-payment-form" style="display:none"></div>';
@@ -1297,6 +1301,70 @@ async function savePayment(leg) {
     if (txnCache[currentTxn.id]) txnCache[currentTxn.id].payments.push(payload);
     renderPanelTab('payments');
     showToast('Payment saved');
+  } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
+}
+
+function openEditPayment(pid) {
+  const el = document.getElementById('pay-edit-'+pid);
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  const p = (txnCache[currentTxn.id]||{payments:[]}).payments.find(function(x){return x.id===pid;});
+  if (!p) return;
+  const cur = p.currency || 'USD';
+  el.innerHTML =
+    '<div class="form-grid three" style="margin-bottom:10px">' +
+    '<div class="form-group"><label>Type</label><select id="ep-type-'+pid+'">'+PAY_TYPES.map(function(t){return '<option'+(t===p.type?' selected':'')+'>'+t+'</option>';}).join('')+'</select></div>' +
+    '<div class="form-group"><label>Amount</label><input id="ep-amount-'+pid+'" type="number" value="'+esc(p.amount||'')+'" /></div>' +
+    '<div class="form-group"><label>Currency</label><select id="ep-currency-'+pid+'" onchange="toggleEditConvRate(\''+pid+'\')">'+['USD','EUR','GBP','AED','INR'].map(function(c){return '<option'+(c===cur?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>' +
+    '<div class="form-group" id="ep-conv-wrap-'+pid+'"'+(cur==='INR'?' style="display:none"':'')+'>'+
+    '<label>Conversion Rate (₹ per 1 '+esc(cur)+')</label><input id="ep-conv-'+pid+'" type="number" step="0.01" value="'+esc(p.conversion_rate||'')+'" placeholder="optional" /></div>' +
+    '<div class="form-group"><label>Party</label><input id="ep-party-'+pid+'" value="'+esc(p.party||'')+'" /></div>' +
+    '<div class="form-group"><label>Due Date</label><input id="ep-due-'+pid+'" type="date" value="'+esc(p.due_date||'')+'" /></div>' +
+    '<div class="form-group"><label>Paid Date</label><input id="ep-paid-'+pid+'" type="date" value="'+esc(p.paid_date||'')+'" /></div>' +
+    '<div class="form-group"><label>Reference</label><input id="ep-ref-'+pid+'" value="'+esc(p.reference||'')+'" /></div>' +
+    '<div class="form-group"><label>Notes</label><input id="ep-notes-'+pid+'" value="'+esc(p.notes||'')+'" /></div>' +
+    '</div>' +
+    '<div class="form-actions"><button class="btn-cancel" onclick="document.getElementById(\'pay-edit-'+pid+'\').style.display=\'none\'">Cancel</button>' +
+    '<button class="btn-save" onclick="saveEditPayment(\''+pid+'\')">Save</button></div>';
+  el.style.display = 'block';
+  el.scrollIntoView({behavior:'smooth'});
+}
+
+function toggleEditConvRate(pid) {
+  const sel = document.getElementById('ep-currency-'+pid);
+  const wrap = document.getElementById('ep-conv-wrap-'+pid);
+  const label = wrap && wrap.querySelector('label');
+  if (!sel || !wrap) return;
+  wrap.style.display = sel.value === 'INR' ? 'none' : '';
+  if (label) label.textContent = 'Conversion Rate (₹ per 1 ' + sel.value + ')';
+}
+
+async function saveEditPayment(pid) {
+  const cur = document.getElementById('ep-currency-'+pid).value;
+  const convEl = document.getElementById('ep-conv-'+pid);
+  const payload = {
+    id: pid,
+    txn_id: currentTxn.id,
+    type:     document.getElementById('ep-type-'+pid).value,
+    amount:   document.getElementById('ep-amount-'+pid).value,
+    currency: cur,
+    conversion_rate: (cur !== 'INR' && convEl && convEl.value) ? convEl.value : '',
+    party:    document.getElementById('ep-party-'+pid).value.trim(),
+    due_date: document.getElementById('ep-due-'+pid).value,
+    paid_date:document.getElementById('ep-paid-'+pid).value,
+    reference:document.getElementById('ep-ref-'+pid).value.trim(),
+    notes:    document.getElementById('ep-notes-'+pid).value.trim(),
+    by: currentUser
+  };
+  const res = await api('updateImportPayment', payload);
+  if (res.success) {
+    const cache = txnCache[currentTxn.id];
+    if (cache) {
+      const idx = cache.payments.findIndex(function(x){return x.id===pid;});
+      if (idx>=0) cache.payments[idx] = Object.assign({}, cache.payments[idx], payload);
+    }
+    renderPanelTab('payments');
+    showToast('Payment updated');
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
 }
 
