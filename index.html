@@ -640,11 +640,12 @@ async function openTxn(id) {
     const origOrdForData = currentTxn._orig_ord_id || orderRefToOrdUuid[currentTxn.order_ref];
     const dataId = id;
     const fallbackId = (origOrdForData && origOrdForData !== id) ? origOrdForData : null;
-    const [dr, pr, cr, tr] = await Promise.all([
-      api('getImportDocs',    {txn_id: dataId}),
-      api('getImportPayments',{txn_id: dataId}),
-      api('getImportCosts',   {txn_id: dataId}),
-      api('getImportTimeline',{txn_id: dataId})
+    const [dr, pr, cr, tr, lr] = await Promise.all([
+      api('getImportDocs',      {txn_id: dataId}),
+      api('getImportPayments',  {txn_id: dataId}),
+      api('getImportCosts',     {txn_id: dataId}),
+      api('getImportTimeline',  {txn_id: dataId}),
+      api('getImportLineItems', {txn_id: dataId})
     ]);
     // Merge from original ORD- id if any data was stored there
     let payments = pr.payments || [];
@@ -671,7 +672,8 @@ async function openTxn(id) {
       docs: docs.length ? docs : initDocs(),
       payments,
       costs,
-      timeline: tr.timeline || initTimeline()
+      timeline: tr.timeline || initTimeline(),
+      lineItems: lr.items || []
     };
   }
   renderPanelTab('overview');
@@ -717,6 +719,8 @@ function renderOverview(t, cache) {
   const sellPrice = parseFloat(t.sell_price||0);
   const qty = parseFloat(t.qty||0);
   const totalCosts = (cache.costs||[]).reduce((s,c)=>s+parseFloat(c.amount||0),0);
+  const lineItems = cache.lineItems || [];
+  const lineItemsTotal = lineItems.reduce((s,li)=>s+parseFloat(li.amount||0),0);
   const grossMargin = sellPrice - buyPrice;
   const netMargin = grossMargin - totalCosts;
   const totalNetMargin = qty ? netMargin * qty : null;
@@ -738,6 +742,38 @@ function renderOverview(t, cache) {
     '<div class="info-row"><span><strong>Loading Port:</strong> '+esc(t.port_loading||'—')+'</span><span><strong>Discharge Port:</strong> '+esc(t.port_discharge||'—')+'</span></div>' +
     '<div class="info-row"><span><strong>ETD:</strong> '+fmtDate(t.etd)+'</span><span><strong>ETA:</strong> '+fmtDate(t.eta)+'</span></div>' +
     (t.notes?'<div style="margin-top:8px;font-size:12px;color:#475569;background:#f8fafc;padding:8px;border-radius:5px">'+esc(t.notes)+'</div>':'') +
+    '</div>' +
+    '<div class="panel-section" id="line-items-section">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+    '<h3 style="margin:0">Line Items</h3><button class="btn-sm primary" onclick="openAddLineItem()">+ Add</button></div>' +
+    (lineItems.length ?
+      '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+      '<thead><tr style="background:#f1f5f9">' +
+      '<th style="text-align:left;padding:5px 6px;font-weight:600">Material</th>' +
+      '<th style="text-align:left;padding:5px 6px;font-weight:600">HSN</th>' +
+      '<th style="text-align:right;padding:5px 6px;font-weight:600">Qty</th>' +
+      '<th style="text-align:left;padding:5px 6px;font-weight:600">Unit</th>' +
+      '<th style="text-align:right;padding:5px 6px;font-weight:600">Price/MT</th>' +
+      '<th style="text-align:left;padding:5px 6px;font-weight:600">Cur</th>' +
+      '<th style="text-align:right;padding:5px 6px;font-weight:600">Amount</th>' +
+      '<th style="padding:5px 4px"></th>' +
+      '</tr></thead><tbody>' +
+      lineItems.map(function(li) {
+        return '<tr style="border-bottom:1px solid #f1f5f9">' +
+          '<td style="padding:5px 6px"><span class="mat-chip">'+esc(li.material||'—')+'</span></td>' +
+          '<td style="padding:5px 6px;color:#64748b;font-size:11px">'+esc(li.hsn||'—')+'</td>' +
+          '<td style="padding:5px 6px;text-align:right">'+parseFloat(li.qty||0).toLocaleString()+'</td>' +
+          '<td style="padding:5px 6px;color:#64748b">'+esc(li.unit||'MT')+'</td>' +
+          '<td style="padding:5px 6px;text-align:right">'+parseFloat(li.price||0).toLocaleString()+'</td>' +
+          '<td style="padding:5px 6px;color:#64748b">'+esc(li.currency||'USD')+'</td>' +
+          '<td style="padding:5px 6px;text-align:right;font-weight:600">'+parseFloat(li.amount||0).toLocaleString()+'</td>' +
+          '<td style="padding:5px 4px"><button onclick="deleteLineItem(\''+esc(li.id)+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px" title="Remove">×</button></td>' +
+          '</tr>';
+      }).join('') +
+      '<tr style="border-top:2px solid #1e3a5f;font-weight:700"><td colspan="6" style="padding:6px">Total</td><td style="padding:6px;text-align:right">'+esc(t.buy_currency||'USD')+' '+lineItemsTotal.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+'</td><td></td></tr>' +
+      '</tbody></table>'
+      : '<div style="color:#94a3b8;font-size:12px">No line items yet. Add materials with individual quantities and rates.</div>') +
+    '<div id="add-line-item-form" style="display:none"></div>' +
     '</div>' +
     '<div class="panel-section"><h3>Buy Side</h3>' +
     '<div class="info-row"><span><strong>Supplier:</strong> '+esc(t.supplier||'—')+'</span><span><strong>Country:</strong> '+esc(t.supplier_country||'—')+'</span></div>' +
@@ -774,6 +810,73 @@ function renderOverview(t, cache) {
     '<div style="display:flex;gap:6px"><input type="text" id="remark-input" placeholder="Add a remark…" style="flex:1;border:1px solid #e2e8f0;border-radius:5px;padding:6px 9px;font-size:12px" onkeydown="if(event.key===\'Enter\')addRemark()" /><button class="btn-save" onclick="addRemark()">Add</button></div>' +
     '</div>';
   loadRemarks();
+}
+
+function openAddLineItem() {
+  const el = document.getElementById('add-line-item-form');
+  if (!el) return;
+  if (el.style.display !== 'none') { el.style.display = 'none'; return; }
+  const cur = currentTxn.buy_currency || 'USD';
+  el.innerHTML =
+    '<div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px;margin-top:10px">' +
+    '<div class="form-grid three" style="margin-bottom:10px">' +
+    '<div class="form-group" style="grid-column:span 2"><label>Material</label><input id="li-material" placeholder="e.g. Copper Scrap Birch" /></div>' +
+    '<div class="form-group"><label>HSN Code</label><input id="li-hsn" placeholder="e.g. 74040012" /></div>' +
+    '<div class="form-group"><label>Qty</label><input id="li-qty" type="number" step="0.001" placeholder="0.000" oninput="calcLineTotal()" /></div>' +
+    '<div class="form-group"><label>Unit</label><select id="li-unit"><option>MT</option><option>KG</option><option>PCS</option><option>LOT</option></select></div>' +
+    '<div class="form-group"><label>Price / Unit</label><input id="li-price" type="number" step="0.01" placeholder="0.00" oninput="calcLineTotal()" /></div>' +
+    '<div class="form-group"><label>Currency</label><select id="li-currency">'+['USD','EUR','GBP','AED','INR'].map(function(c){return '<option'+(c===cur?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>' +
+    '<div class="form-group"><label>Amount (auto)</label><input id="li-amount" type="number" step="0.01" placeholder="auto-calculated" /></div>' +
+    '</div>' +
+    '<div class="form-actions"><button class="btn-cancel" onclick="document.getElementById(\'add-line-item-form\').style.display=\'none\'">Cancel</button>' +
+    '<button class="btn-save" onclick="saveLineItem()">Save Line Item</button></div></div>';
+  el.style.display = 'block';
+  el.scrollIntoView({behavior:'smooth'});
+}
+
+function calcLineTotal() {
+  const qty = parseFloat(document.getElementById('li-qty').value||0);
+  const price = parseFloat(document.getElementById('li-price').value||0);
+  const amtEl = document.getElementById('li-amount');
+  if (amtEl && qty && price) amtEl.value = (qty * price).toFixed(2);
+}
+
+async function saveLineItem() {
+  const material = (document.getElementById('li-material').value||'').trim();
+  const qty = document.getElementById('li-qty').value;
+  if (!material || !qty) { showToast('Material and qty are required', 'error'); return; }
+  const price = document.getElementById('li-price').value;
+  const amtEl = document.getElementById('li-amount');
+  const amount = amtEl.value || (qty && price ? (parseFloat(qty)*parseFloat(price)).toFixed(2) : '');
+  const payload = {
+    txn_id: currentTxn.id,
+    material,
+    hsn:      (document.getElementById('li-hsn').value||'').trim(),
+    qty,
+    unit:     document.getElementById('li-unit').value,
+    price,
+    currency: document.getElementById('li-currency').value,
+    amount,
+    by: currentUser
+  };
+  const res = await api('addImportLineItem', payload);
+  if (res.success) {
+    payload.id = res.id;
+    payload.amount = res.amount || amount;
+    if (txnCache[currentTxn.id]) txnCache[currentTxn.id].lineItems = (txnCache[currentTxn.id].lineItems||[]).concat(payload);
+    renderPanelTab('overview');
+    showToast('Line item saved');
+  } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
+}
+
+async function deleteLineItem(lid) {
+  if (!confirm('Remove this line item?')) return;
+  const res = await api('deleteImportLineItem', {id: lid, txn_id: currentTxn.id});
+  if (res.success) {
+    if (txnCache[currentTxn.id]) txnCache[currentTxn.id].lineItems = (txnCache[currentTxn.id].lineItems||[]).filter(function(li){return li.id!==lid;});
+    renderPanelTab('overview');
+    showToast('Removed');
+  } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
 }
 
 async function loadRemarks() {
