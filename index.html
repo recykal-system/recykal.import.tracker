@@ -753,8 +753,13 @@ function renderOverview(t, cache) {
 }
 
 async function loadRemarks() {
-  const res = await api('getImportRemarks', {txn_id: currentTxn.id});
-  const all = res.remarks || [];
+  const lookupIds = [currentTxn.id];
+  if (currentTxn.order_ref && currentTxn.order_ref !== currentTxn.id) lookupIds.push(currentTxn.order_ref);
+  let all = [];
+  for (const lid of lookupIds) {
+    const res = await api('getImportRemarks', {txn_id: lid});
+    all = all.concat(res.remarks || []);
+  }
   const links = all.filter(r => r.remark.startsWith('[L]::'));
   const remarks = all.filter(r => !r.remark.startsWith('[L]::') && !r.remark.startsWith('[DL::'));
   const rEl = document.getElementById('remarks-list');
@@ -870,11 +875,20 @@ async function renderDocuments(t, docs) {
   // Load review history first and derive status from it (source of truth)
   const statusMap = {accepted:'Approved', changes:'Changes Requested', resubmit:'Resubmitted', closed:'Not Required'};
   if (!docReviewCache[t.id]) {
-    const res = await api('getImportDocReviews', {txn_id: t.id});
+    // Promoted transactions: reviews may be stored under the original ORD- id (order_ref)
+    const lookupIds = [t.id];
+    if (t.order_ref && t.order_ref !== t.id) lookupIds.push(t.order_ref);
     docReviewCache[t.id] = {};
-    (res.reviews||[]).forEach(function(r) {
-      if (!docReviewCache[t.id][r.doc_name]) docReviewCache[t.id][r.doc_name] = [];
-      docReviewCache[t.id][r.doc_name].push(r);
+    for (const lid of lookupIds) {
+      const res = await api('getImportDocReviews', {txn_id: lid});
+      (res.reviews||[]).forEach(function(r) {
+        if (!docReviewCache[t.id][r.doc_name]) docReviewCache[t.id][r.doc_name] = [];
+        docReviewCache[t.id][r.doc_name].push(r);
+      });
+    }
+    // Sort merged reviews by created_at so latest is last
+    Object.keys(docReviewCache[t.id]).forEach(function(k) {
+      docReviewCache[t.id][k].sort(function(a,b){ return (a.created_at||'').localeCompare(b.created_at||''); });
     });
   }
   // Override doc status from latest review action
@@ -965,8 +979,14 @@ async function loadDocLinks(idx) {
   const el = document.getElementById('doc-links-'+idx);
   if (!el) return;
   if (!_docLinksCache[currentTxn.id]) {
-    const res = await api('getImportRemarks', {txn_id: currentTxn.id});
-    _docLinksCache[currentTxn.id] = (res.remarks||[]).filter(r => r.remark.startsWith('[DL::'));
+    const lookupIds = [currentTxn.id];
+    if (currentTxn.order_ref && currentTxn.order_ref !== currentTxn.id) lookupIds.push(currentTxn.order_ref);
+    let allR = [];
+    for (const lid of lookupIds) {
+      const res = await api('getImportRemarks', {txn_id: lid});
+      allR = allR.concat(res.remarks||[]);
+    }
+    _docLinksCache[currentTxn.id] = allR.filter(r => r.remark.startsWith('[DL::'));
   }
   const allDocLinks = _docLinksCache[currentTxn.id];
   const docName = el.closest('[id^="doc-detail-"]') ? null : null;
@@ -1006,11 +1026,19 @@ async function saveDocLink(docName, idx) {
 
 async function loadDocReviews(txnId, docs) {
   if (!docReviewCache[txnId]) {
-    const res = await api('getImportDocReviews', {txn_id: txnId});
+    const t = allTransactions.find(function(x){return x.id===txnId;}) || {};
+    const lookupIds = [txnId];
+    if (t.order_ref && t.order_ref !== txnId) lookupIds.push(t.order_ref);
     docReviewCache[txnId] = {};
-    (res.reviews||[]).forEach(function(r) {
-      if (!docReviewCache[txnId][r.doc_name]) docReviewCache[txnId][r.doc_name] = [];
-      docReviewCache[txnId][r.doc_name].push(r);
+    for (const lid of lookupIds) {
+      const res = await api('getImportDocReviews', {txn_id: lid});
+      (res.reviews||[]).forEach(function(r) {
+        if (!docReviewCache[txnId][r.doc_name]) docReviewCache[txnId][r.doc_name] = [];
+        docReviewCache[txnId][r.doc_name].push(r);
+      });
+    }
+    Object.keys(docReviewCache[txnId]).forEach(function(k) {
+      docReviewCache[txnId][k].sort(function(a,b){ return (a.created_at||'').localeCompare(b.created_at||''); });
     });
   }
   docs.forEach(function(d, i) {
