@@ -367,6 +367,7 @@ const DOC_STATUS = ['Pending','Draft Received','Under Review','Changes Requested
 const DOC_STATUS_CLASS = {'Pending':'pending','Draft Received':'draft','Under Review':'received','Changes Requested':'changesrequested','Resubmitted':'resubmitted','Approved':'approved','Not Required':'notrequired'};
 const DOC_REVIEWERS = ['Recykal','CHA','Buyer','Recykal + CHA','Recykal + Buyer','All Parties'];
 let docReviewCache = {}; // txn_id -> {doc_name -> [reviews]}
+let orderRefToOrdUuid = {}; // order_ref -> original ORD-uuid (from getOrders)
 const PARTY_TYPES = ['CHA','Freight Forwarder','Inspection Agency','Shipping Line','Bank','Insurance Company','Intermediary','Custom'];
 const COST_TYPES = ['CHA','Freight / Shipping','Insurance Premium','Import Duty','Inspection Fee','Port Charges','THC','Demurrage','Detention','Labour','Handling','Loading','Unloading','Crane','JCB','Hydra','Testing','Third Party Fee','Bank Charges','Other'];
 const PAY_TYPES = ['Advance','Part Payment','Balance','LC at Sight','CAD','DA','DP','Post Clearance'];
@@ -500,6 +501,10 @@ async function fetchTransactions() {
     const impTxns = (impR && impR.transactions) ? impR.transactions : [];
     const orders = (ordR && ordR.orders) ? ordR.orders : [];
     const impIds = new Set(impTxns.map(function(t) { return t.order_ref; }));
+    // Build map: formatted order_ref → original UUID (ORD-uuid stored under reviews)
+    orders.forEach(function(o) {
+      if (o.order_ref) orderRefToOrdUuid[o.order_ref] = 'ORD-' + o.id;
+    });
     const fromOrders = orders
       .filter(function(o) { return !impIds.has(o.order_ref); })
       .map(mapOrderToTxn);
@@ -605,9 +610,13 @@ async function openTxn(id) {
       if (promRes.success) { promId = promRes.id; promRef = promRes.txn_ref; }
     }
     if (promId) {
+      const origOrdId = t.id; // ORD-uuid — reviews/remarks stored under this key
       const idx = allTransactions.findIndex(t2=>t2.id===id);
-      if (idx>=0) allTransactions[idx] = Object.assign({}, allTransactions[idx], {id: promId, txn_ref: promRef, _from_lead_tracker: false});
+      if (idx>=0) allTransactions[idx] = Object.assign({}, allTransactions[idx], {id: promId, txn_ref: promRef, _from_lead_tracker: false, _orig_ord_id: origOrdId});
       currentTxn = allTransactions.find(t2=>t2.id===promId) || currentTxn;
+      currentTxn._orig_ord_id = origOrdId; // keep for this session's lookup
+      if (!txnCache[promId]) txnCache[promId] = {};
+      txnCache[promId]._orig_ord_id = origOrdId;
       id = currentTxn.id;
       localStorage.removeItem('imp_transactions');
     }
@@ -753,8 +762,9 @@ function renderOverview(t, cache) {
 }
 
 async function loadRemarks() {
+  const _origOrd = currentTxn._orig_ord_id || (txnCache[currentTxn.id] && txnCache[currentTxn.id]._orig_ord_id) || orderRefToOrdUuid[currentTxn.order_ref];
   const lookupIds = [currentTxn.id];
-  if (currentTxn.order_ref && currentTxn.order_ref !== currentTxn.id) lookupIds.push(currentTxn.order_ref);
+  if (_origOrd && _origOrd !== currentTxn.id) lookupIds.push(_origOrd);
   let all = [];
   for (const lid of lookupIds) {
     const res = await api('getImportRemarks', {txn_id: lid});
@@ -875,9 +885,10 @@ async function renderDocuments(t, docs) {
   // Load review history first and derive status from it (source of truth)
   const statusMap = {accepted:'Approved', changes:'Changes Requested', resubmit:'Resubmitted', closed:'Not Required'};
   if (!docReviewCache[t.id]) {
-    // Promoted transactions: reviews may be stored under the original ORD- id (order_ref)
+    // Promoted transactions: reviews stored under the original ORD-uuid, not the IMP- id
+    const origOrd = t._orig_ord_id || (txnCache[t.id] && txnCache[t.id]._orig_ord_id) || orderRefToOrdUuid[t.order_ref];
     const lookupIds = [t.id];
-    if (t.order_ref && t.order_ref !== t.id) lookupIds.push(t.order_ref);
+    if (origOrd && origOrd !== t.id) lookupIds.push(origOrd);
     docReviewCache[t.id] = {};
     for (const lid of lookupIds) {
       const res = await api('getImportDocReviews', {txn_id: lid});
@@ -979,8 +990,9 @@ async function loadDocLinks(idx) {
   const el = document.getElementById('doc-links-'+idx);
   if (!el) return;
   if (!_docLinksCache[currentTxn.id]) {
+    const _origOrd2 = currentTxn._orig_ord_id || (txnCache[currentTxn.id] && txnCache[currentTxn.id]._orig_ord_id) || orderRefToOrdUuid[currentTxn.order_ref];
     const lookupIds = [currentTxn.id];
-    if (currentTxn.order_ref && currentTxn.order_ref !== currentTxn.id) lookupIds.push(currentTxn.order_ref);
+    if (_origOrd2 && _origOrd2 !== currentTxn.id) lookupIds.push(_origOrd2);
     let allR = [];
     for (const lid of lookupIds) {
       const res = await api('getImportRemarks', {txn_id: lid});
@@ -1027,8 +1039,9 @@ async function saveDocLink(docName, idx) {
 async function loadDocReviews(txnId, docs) {
   if (!docReviewCache[txnId]) {
     const t = allTransactions.find(function(x){return x.id===txnId;}) || {};
+    const origOrd2 = t._orig_ord_id || (txnCache[txnId] && txnCache[txnId]._orig_ord_id) || orderRefToOrdUuid[t.order_ref];
     const lookupIds = [txnId];
-    if (t.order_ref && t.order_ref !== txnId) lookupIds.push(t.order_ref);
+    if (origOrd2 && origOrd2 !== txnId) lookupIds.push(origOrd2);
     docReviewCache[txnId] = {};
     for (const lid of lookupIds) {
       const res = await api('getImportDocReviews', {txn_id: lid});
