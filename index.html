@@ -159,7 +159,7 @@ td { padding: 9px 12px; vertical-align: middle; }
     <div id="g_id_onload"
          data-client_id="990583974585-urcqsg4igf0m4r42h3srhr7qeodk6uk0.apps.googleusercontent.com"
          data-callback="handleCredentialResponse"
-         data-auto_select="true">
+         data-auto_select="false">
     </div>
     <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with" data-shape="rectangular" data-logo_alignment="left"></div>
     <div id="signin-error" style="display:none;margin-top:16px;background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:10px 14px;color:#991b1b;font-size:12px;"></div>
@@ -413,7 +413,7 @@ window.onload = function() {
   document.getElementById('signin-page').style.display = 'flex';
   if (!_gisInited) {
     _gisInited = true;
-    google.accounts.id.initialize({ client_id: '990583974585-urcqsg4igf0m4r42h3srhr7qeodk6uk0.apps.googleusercontent.com', callback: handleCredentialResponse, auto_select: true });
+    google.accounts.id.initialize({ client_id: '990583974585-urcqsg4igf0m4r42h3srhr7qeodk6uk0.apps.googleusercontent.com', callback: handleCredentialResponse, auto_select: false });
     google.accounts.id.renderButton(document.querySelector('.g_id_signin'), { type: 'standard', size: 'large', theme: 'outline', text: 'sign_in_with', shape: 'rectangular', logo_alignment: 'left' });
   }
 };
