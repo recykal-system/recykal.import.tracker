@@ -596,25 +596,59 @@ async function openTxn(id) {
       api('getImportTimeline',{txn_id: id})
     ]);
     let docs = dr.docs || [];
-    // For lead-tracker orders with no saved docs, seed them now
-    if (!docs.length) {
-      const seed = initDocs();
-      await api('updateImportDocs', {txn_id: id, docs: JSON.stringify(seed), by: currentUser});
-      docs = seed;
+    let resolvedId = id;
+    // Lead tracker orders (ORD- prefix) have no backend rows yet — promote to ImportTransaction
+    if (!docs.length && currentTxn._from_lead_tracker) {
+      const t = currentTxn;
+      const promRes = await api('addImportTransaction', {
+        order_ref: t.order_ref || t.txn_ref,
+        buy_direct: t.buy_direct || 'yes',
+        supplier: t.supplier, supplier_country: t.supplier_country,
+        intermediary: t.intermediary, intermediary_price: t.intermediary_price,
+        buy_price: t.buy_price, buy_currency: t.buy_currency, buy_payment_terms: t.buy_payment_terms,
+        buyer: t.buyer, buyer_country: t.buyer_country,
+        sell_price: t.sell_price, sell_currency: t.sell_currency, sell_payment_terms: t.sell_payment_terms,
+        material: t.material, qty: t.qty, unit: t.unit,
+        incoterms: t.incoterms, vessel: t.vessel, container: t.container, bl: t.bl,
+        port_loading: t.port_loading, port_discharge: t.port_discharge,
+        etd: t.etd, eta: t.eta, stage: t.stage || 'Confirmation',
+        notes: t.notes, assigned_to: t.assigned_to,
+        by: currentUser
+      });
+      if (promRes.success) {
+        resolvedId = promRes.id;
+        // Replace the ORD- entry in allTransactions with promoted entry
+        const idx = allTransactions.findIndex(t2=>t2.id===id);
+        if (idx>=0) {
+          allTransactions[idx] = Object.assign({}, allTransactions[idx], {
+            id: promRes.id, txn_ref: promRes.txn_ref, _from_lead_tracker: false
+          });
+        }
+        currentTxn = allTransactions.find(t2=>t2.id===promRes.id) || currentTxn;
+        localStorage.removeItem('imp_transactions');
+        // Re-fetch docs with new id
+        const dr2 = await api('getImportDocs', {txn_id: resolvedId});
+        docs = dr2.docs || initDocs();
+      } else {
+        docs = initDocs();
+      }
     }
     // Add any new doc types missing from older saved sets
-    const existingNames = new Set(docs.map(d=>d.name));
-    const missing = DOC_TYPES.filter(n=>!existingNames.has(n)).map(n=>({name:n,status:'Pending',reviewer:'',expected_date:'',received_date:'',notes:'',txn_id:id}));
-    if (missing.length) {
-      docs = docs.concat(missing);
-      await api('updateImportDocs', {txn_id: id, docs: JSON.stringify(docs), by: currentUser});
+    if (docs.length) {
+      const existingNames = new Set(docs.map(d=>d.name));
+      const missing = DOC_TYPES.filter(n=>!existingNames.has(n)).map(n=>({name:n,status:'Pending',reviewer:'',expected_date:'',received_date:'',notes:'',txn_id:resolvedId}));
+      if (missing.length) {
+        docs = docs.concat(missing);
+        await api('updateImportDocs', {txn_id: resolvedId, docs: JSON.stringify(docs), by: currentUser});
+      }
     }
-    txnCache[id] = {
+    txnCache[resolvedId] = {
       docs,
       payments: pr.payments || [],
       costs:    cr.costs    || [],
       timeline: tr.timeline || initTimeline()
     };
+    if (resolvedId !== id) txnCache[id] = txnCache[resolvedId];
   }
   renderPanelTab('overview');
 }
