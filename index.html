@@ -1204,7 +1204,7 @@ function renderPayments(t, payments) {
       const isOverdue = p.due_date && !isPaid && new Date(p.due_date) < new Date();
       return '<div class="pay-item">' +
         '<div>' +
-        '<div class="pay-amount">'+esc(p.currency||'USD')+' '+parseFloat(p.amount||0).toLocaleString()+'</div>' +
+        '<div class="pay-amount">'+esc(p.currency||'USD')+' '+parseFloat(p.amount||0).toLocaleString()+(p.currency&&p.currency!=='INR'&&p.conversion_rate?' <span style="font-size:11px;color:#64748b;font-weight:400">@ ₹'+parseFloat(p.conversion_rate).toFixed(2)+'</span>':'')+'</div>' +
         '<div class="pay-meta"><strong>'+esc(p.type||'Payment')+'</strong>' +
         (p.party?' · To/From: '+esc(p.party):'') +
         (p.due_date?' · Due: '+fmtDate(p.due_date):'') +
@@ -1247,7 +1247,9 @@ function openAddPayment(leg) {
     '<div class="form-grid three">' +
     '<div class="form-group"><label>Type</label><select id="ap-type">'+PAY_TYPES.map(p=>'<option>'+p+'</option>').join('')+'</select></div>' +
     '<div class="form-group"><label>Amount</label><input id="ap-amount" type="number" placeholder="0.00" /></div>' +
-    '<div class="form-group"><label>Currency</label><select id="ap-currency">'+['USD','EUR','GBP','AED','INR'].map(c=>'<option'+(c===currency?' selected':'')+'>'+c+'</option>').join('')+'</select></div>' +
+    '<div class="form-group"><label>Currency</label><select id="ap-currency" onchange="toggleConvRate()">'+['USD','EUR','GBP','AED','INR'].map(c=>'<option'+(c===currency?' selected':'')+'>'+c+'</option>').join('')+'</select></div>' +
+    '<div class="form-group" id="ap-conv-wrap"'+(currency==='INR'?' style="display:none"':'')+'>'+
+    '<label>Conversion Rate (₹ per 1 '+esc(currency)+')</label><input id="ap-conv" type="number" step="0.01" placeholder="optional" /></div>' +
     '<div class="form-group"><label>'+(leg==='buy'?'To Party (Supplier/Intermediary)':'From Party (Buyer)')+'</label><input id="ap-party" value="'+esc(defaultParty)+'" /></div>' +
     '<div class="form-group"><label>Due Date</label><input id="ap-due" type="date" /></div>' +
     '<div class="form-group"><label>Paid Date</label><input id="ap-paid" type="date" /></div>' +
@@ -1260,15 +1262,28 @@ function openAddPayment(leg) {
   document.getElementById('add-payment-form').scrollIntoView({behavior:'smooth'});
 }
 
+function toggleConvRate() {
+  const sel = document.getElementById('ap-currency');
+  const wrap = document.getElementById('ap-conv-wrap');
+  const label = wrap && wrap.querySelector('label');
+  if (!sel || !wrap) return;
+  const isINR = sel.value === 'INR';
+  wrap.style.display = isINR ? 'none' : '';
+  if (label) label.textContent = 'Conversion Rate (₹ per 1 ' + sel.value + ')';
+}
+
 async function savePayment(leg) {
   const amount = document.getElementById('ap-amount').value;
   if (!amount) { showToast('Amount is required', 'error'); return; }
+  const cur = document.getElementById('ap-currency').value;
+  const convEl = document.getElementById('ap-conv');
   const payload = {
     txn_id: currentTxn.id,
     leg,
     type:     document.getElementById('ap-type').value,
     amount,
-    currency: document.getElementById('ap-currency').value,
+    currency: cur,
+    conversion_rate: (cur !== 'INR' && convEl && convEl.value) ? convEl.value : '',
     party:    document.getElementById('ap-party').value.trim(),
     due_date: document.getElementById('ap-due').value,
     paid_date:document.getElementById('ap-paid').value,
