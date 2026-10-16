@@ -636,12 +636,27 @@ async function openTxn(id) {
   document.getElementById('panel-body').innerHTML = '<div style="padding:20px;color:#94a3b8"><span class="spinner"></span> Loading…</div>';
   // Fetch all detail if not cached
   if (!txnCache[id]) {
+    // Promoted txns: data may be stored under original ORD-uuid
+    const origOrdForData = currentTxn._orig_ord_id || orderRefToOrdUuid[currentTxn.order_ref];
+    const dataId = id;
+    const fallbackId = (origOrdForData && origOrdForData !== id) ? origOrdForData : null;
     const [dr, pr, cr, tr] = await Promise.all([
-      api('getImportDocs',    {txn_id: id}),
-      api('getImportPayments',{txn_id: id}),
-      api('getImportCosts',   {txn_id: id}),
-      api('getImportTimeline',{txn_id: id})
+      api('getImportDocs',    {txn_id: dataId}),
+      api('getImportPayments',{txn_id: dataId}),
+      api('getImportCosts',   {txn_id: dataId}),
+      api('getImportTimeline',{txn_id: dataId})
     ]);
+    // Merge from original ORD- id if any data was stored there
+    let payments = pr.payments || [];
+    let costs = cr.costs || [];
+    if (fallbackId) {
+      const [pr2, cr2] = await Promise.all([
+        api('getImportPayments', {txn_id: fallbackId}),
+        api('getImportCosts',    {txn_id: fallbackId})
+      ]);
+      payments = payments.concat(pr2.payments || []);
+      costs    = costs.concat(cr2.costs || []);
+    }
     let docs = dr.docs || [];
     // Add any new doc types missing from older saved sets
     if (docs.length) {
@@ -654,8 +669,8 @@ async function openTxn(id) {
     }
     txnCache[id] = {
       docs: docs.length ? docs : initDocs(),
-      payments: pr.payments || [],
-      costs:    cr.costs    || [],
+      payments,
+      costs,
       timeline: tr.timeline || initTimeline()
     };
   }
