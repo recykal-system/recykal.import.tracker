@@ -386,6 +386,7 @@ const DOC_STATUS_CLASS = {'Pending':'pending','Draft Received':'draft','Under Re
 const DOC_REVIEWERS = ['Recykal','CHA','Buyer','Recykal + CHA','Recykal + Buyer','All Parties'];
 let docReviewCache = {}; // txn_id -> {doc_name -> [reviews]}
 let orderRefToOrdUuid = {}; // order_ref -> original ORD-uuid (from getOrders)
+let ordersMap = {}; // order_ref -> order object (for line_items lookup)
 const PARTY_TYPES = ['CHA','Freight Forwarder','Inspection Agency','Shipping Line','Bank','Insurance Company','Intermediary','Custom'];
 const COST_TYPES = ['CHA','Freight / Shipping','Insurance Premium','Import Duty','Inspection Fee','Port Charges','THC','Demurrage','Detention','Labour','Handling','Loading','Unloading','Crane','JCB','Hydra','Testing','Third Party Fee','Bank Charges','Other'];
 const PAY_TYPES = ['Advance','Part Payment','Balance','LC at Sight','CAD','DA','DP','Post Clearance'];
@@ -519,9 +520,12 @@ async function fetchTransactions() {
     const impTxns = (impR && impR.transactions) ? impR.transactions : [];
     const orders = (ordR && ordR.orders) ? ordR.orders : [];
     const impIds = new Set(impTxns.map(function(t) { return t.order_ref; }));
-    // Build map: formatted order_ref → original UUID (ORD-uuid stored under reviews)
+    // Build maps: formatted order_ref → original UUID and → order object
     orders.forEach(function(o) {
-      if (o.order_ref) orderRefToOrdUuid[o.order_ref] = 'ORD-' + o.id;
+      if (o.order_ref) {
+        orderRefToOrdUuid[o.order_ref] = 'ORD-' + o.id;
+        ordersMap[o.order_ref] = o;
+      }
     });
     const fromOrders = orders
       .filter(function(o) { return !impIds.has(o.order_ref); })
@@ -568,6 +572,33 @@ function clearFilters() {
   applyFilters();
 }
 
+// Returns array of material names from the linked order's line_items, or [t.material]
+function txnMaterials(t) {
+  const ord = t.order_ref ? ordersMap[t.order_ref] : null;
+  if (ord && ord.line_items) {
+    try {
+      const li = typeof ord.line_items === 'string' ? JSON.parse(ord.line_items) : ord.line_items;
+      if (li && li.length) return li.map(function(l){ return l.material; }).filter(Boolean);
+    } catch(e) {}
+  }
+  return [t.material || '—'];
+}
+
+// Returns total qty from order's line_items, or t.qty
+function txnTotalQty(t) {
+  const ord = t.order_ref ? ordersMap[t.order_ref] : null;
+  if (ord && ord.line_items) {
+    try {
+      const li = typeof ord.line_items === 'string' ? JSON.parse(ord.line_items) : ord.line_items;
+      if (li && li.length) {
+        const total = li.reduce(function(s,l){ return s + parseFloat(l.qty||0); }, 0);
+        if (total > 0) return total.toFixed(3).replace(/\.?0+$/,'') + ' MT';
+      }
+    } catch(e) {}
+  }
+  return t.qty ? (t.qty + ' ' + (t.unit||'MT')) : '—';
+}
+
 function renderTable(txns) {
   const tbody = document.getElementById('txn-body');
   if (!txns.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="13">No transactions yet. Click "+ New Transaction" to start.</td></tr>'; return; }
@@ -583,8 +614,8 @@ function renderTable(txns) {
       '<td style="font-size:11px;color:#64748b">'+esc(t.order_ref||'—')+'</td>' +
       '<td>'+supplierDisplay+'</td>' +
       '<td>'+esc(t.buyer||'—')+'</td>' +
-      '<td><span class="mat-chip">'+esc(t.material||'—')+'</span></td>' +
-      '<td style="font-size:11px">'+(t.qty?esc(t.qty)+' '+esc(t.unit||'MT'):'—')+'</td>' +
+      '<td>'+txnMaterials(t).map(function(m){return '<span class="mat-chip">'+esc(m)+'</span>';}).join('')+'</td>' +
+      '<td style="font-size:11px">'+txnTotalQty(t)+'</td>' +
       '<td><span class="badge badge-'+(STAGE_CLASS[t.stage]||'confirmation')+'">'+esc(t.stage||'Confirmation')+'</span></td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.etd)+'</td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.eta)+'</td>' +
@@ -774,7 +805,7 @@ function renderOverview(t, cache) {
     '<button class="btn-sm" onclick="openEditOverview()">Edit</button>' +
     '</div>' +
     '<div class="info-row"><span><strong>Txn Ref:</strong> '+esc(t.txn_ref||'—')+'</span><span><strong>Order Ref:</strong> '+esc(t.order_ref||'—')+'</span><span><strong>Assigned:</strong> '+esc(t.assigned_to||'—')+'</span></div>' +
-    '<div class="info-row"><span><strong>Material:</strong> <span class="mat-chip">'+esc(t.material||'—')+'</span></span><span><strong>Qty:</strong> '+(t.qty?esc(t.qty)+' '+esc(t.unit||'MT'):'—')+'</span><span><strong>Incoterms:</strong> '+esc(t.incoterms||'—')+'</span></div>' +
+    '<div class="info-row"><span><strong>Material:</strong> '+txnMaterials(t).map(function(m){return '<span class="mat-chip">'+esc(m)+'</span>';}).join('')+'</span><span><strong>Qty:</strong> '+txnTotalQty(t)+'</span><span><strong>Incoterms:</strong> '+esc(t.incoterms||'—')+'</span></div>' +
     '<div class="info-row"><span><strong>Vessel:</strong> '+esc(t.vessel||'—')+'</span><span><strong>Container:</strong> '+esc(t.container||'—')+'</span><span><strong>BL:</strong> '+esc(t.bl||'—')+'</span></div>' +
     '<div class="info-row"><span><strong>Loading Port:</strong> '+esc(t.port_loading||'—')+'</span><span><strong>Discharge Port:</strong> '+esc(t.port_discharge||'—')+'</span></div>' +
     '<div class="info-row"><span><strong>ETD:</strong> '+fmtDate(t.etd)+'</span><span><strong>ETA:</strong> '+fmtDate(t.eta)+'</span></div>' +
