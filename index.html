@@ -283,16 +283,16 @@ td { padding: 9px 12px; vertical-align: middle; }
           <div class="form-group"><label>What We Pay Intermediary / MT</label><input id="a-intermediary-price" type="number" placeholder="0.00" /></div>
         </div>
       </div>
-      <div class="form-group"><label>Buy Price / MT *</label><input id="a-buy-price" type="number" placeholder="0.00" /></div>
-      <div class="form-group"><label>Buy Currency</label>
+      <div class="form-group"><label>Supplier Price / MT *</label><input id="a-buy-price" type="number" placeholder="0.00" /></div>
+      <div class="form-group"><label>Supplier Currency</label>
         <select id="a-buy-currency"><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>INR</option></select>
       </div>
       <div class="section-divider">Sell Side</div>
       <div class="form-group"><label>Buyer Company *</label><input id="a-buyer" placeholder="Buyer name" /></div>
       <div class="form-group"><label>Buyer Country</label><input id="a-buyer-country" placeholder="e.g. India" /></div>
-      <div class="form-group"><label>Sell Price / MT *</label><input id="a-sell-price" type="number" placeholder="0.00" /></div>
-      <div class="form-group"><label>Sell Currency</label>
-        <select id="a-sell-currency"><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option><option>INR</option></select>
+      <div class="form-group"><label>Buyer Price / MT *</label><input id="a-sell-price" type="number" placeholder="0.00" /></div>
+      <div class="form-group"><label>Buyer Currency</label>
+        <select id="a-sell-currency"><option>INR</option><option>USD</option><option>EUR</option><option>GBP</option><option>AED</option></select>
       </div>
       <div class="section-divider">Cargo</div>
       <div class="form-group"><label>Material *</label>
@@ -846,16 +846,16 @@ function renderOverview(t, cache) {
     '<div class="panel-section"><h3>Buy Side</h3>' +
     '<div class="info-row"><span><strong>Supplier:</strong> '+esc(t.supplier||'—')+'</span><span><strong>Country:</strong> '+esc(t.supplier_country||'—')+'</span></div>' +
     (t.buy_direct==='no'?'<div class="info-row"><span><strong>Via Intermediary:</strong> '+esc(t.intermediary||'—')+'</span><span><strong>We Pay Intermediary:</strong> '+esc(t.buy_currency||'USD')+' '+esc(t.intermediary_price||'—')+'/MT</span></div>':'')+
-    '<div class="info-row"><span><strong>Buy Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
+    '<div class="info-row"><span><strong>Supplier Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
     '</div>' +
     '<div class="panel-section"><h3>Sell Side</h3>' +
     '<div class="info-row"><span><strong>Buyer:</strong> '+esc(t.buyer||'—')+'</span><span><strong>Country:</strong> '+esc(t.buyer_country||'—')+'</span></div>' +
-    '<div class="info-row"><span><strong>Sell Price / MT:</strong> <strong style="color:#166534">'+esc(t.sell_currency||'USD')+' '+sellPrice.toFixed(2)+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.sell_payment_terms||'—')+'</span></div>' +
+    '<div class="info-row"><span><strong>Buyer Price / MT:</strong> <strong style="color:#166534">'+esc(t.sell_currency||'USD')+' '+sellPrice.toFixed(2)+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.sell_payment_terms||'—')+'</span></div>' +
     '</div>' +
     '<div class="panel-section"><h3>Margin Summary</h3>' +
     '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
-    '<tr><td style="padding:3px 0">Sell Price / MT</td><td style="text-align:right;font-weight:700">'+esc(t.sell_currency||'USD')+' '+sellPrice.toFixed(2)+'</td></tr>' +
-    '<tr><td style="color:#64748b;padding:3px 0">− Buy Price / MT</td><td style="text-align:right;color:#ef4444">'+buyPrice.toFixed(2)+'</td></tr>' +
+    '<tr><td style="padding:3px 0">Buyer Price / MT</td><td style="text-align:right;font-weight:700">'+esc(t.sell_currency||'USD')+' '+sellPrice.toFixed(2)+'</td></tr>' +
+    '<tr><td style="color:#64748b;padding:3px 0">− Supplier Price / MT</td><td style="text-align:right;color:#ef4444">'+buyPrice.toFixed(2)+'</td></tr>' +
     (intPrice?'<tr><td style="color:#64748b;padding:3px 0">− Intermediary / MT</td><td style="text-align:right;color:#ef4444">'+intPrice.toFixed(2)+'</td></tr>':'') +
     '<tr><td style="color:#64748b;padding:3px 0">− Total Costs / MT</td><td style="text-align:right;color:#ef4444">'+(totalCosts-intPrice > 0 ? (totalCosts-intPrice).toFixed(2) : '0.00')+'</td></tr>' +
     '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin / MT</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(netMargin>=0?'#166534':'#991b1b')+'">'+netMargin.toFixed(2)+'</td></tr>' +
@@ -1437,6 +1437,22 @@ function openAddPayment(leg) {
   document.getElementById('add-payment-form').scrollIntoView({behavior:'smooth'});
 }
 
+function toggleEtConv() {
+  const sel = document.getElementById('et-buy-cur');
+  const wrap = document.getElementById('et-conv-wrap');
+  const label = wrap && wrap.querySelector('label');
+  if (!sel || !wrap) return;
+  wrap.style.display = sel.value === 'INR' ? 'none' : '';
+  if (label) label.textContent = 'Conv. Rate (₹ per 1 ' + sel.value + ')';
+}
+function toggleEtSellConv() {
+  const sel = document.getElementById('et-sell-cur');
+  const wrap = document.getElementById('et-sell-conv-wrap');
+  const label = wrap && wrap.querySelector('label');
+  if (!sel || !wrap) return;
+  wrap.style.display = sel.value === 'INR' ? 'none' : '';
+  if (label) label.textContent = 'Conv. Rate (₹ per 1 ' + sel.value + ')';
+}
 function toggleConvRate() {
   const sel = document.getElementById('ap-currency');
   const wrap = document.getElementById('ap-conv-wrap');
@@ -1566,8 +1582,8 @@ function renderCosts(t, costs) {
     (costs.length ? '<div class="cost-total"><span>Total Costs / MT</span><strong>'+esc(t.buy_currency||'USD')+' '+totalCosts.toFixed(2)+'</strong></div>' : '') +
     '<div style="margin-top:16px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">' +
     '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
-    '<tr><td style="padding:3px 0">Sell Price / MT</td><td style="text-align:right;font-weight:700">'+esc(t.sell_currency||'USD')+' '+sellPrice.toFixed(2)+'</td></tr>' +
-    '<tr><td style="color:#64748b;padding:3px 0">− Buy Price / MT</td><td style="text-align:right;color:#ef4444">'+buyPrice.toFixed(2)+'</td></tr>' +
+    '<tr><td style="padding:3px 0">Buyer Price / MT</td><td style="text-align:right;font-weight:700">'+esc(t.sell_currency||'USD')+' '+sellPrice.toFixed(2)+'</td></tr>' +
+    '<tr><td style="color:#64748b;padding:3px 0">− Supplier Price / MT</td><td style="text-align:right;color:#ef4444">'+buyPrice.toFixed(2)+'</td></tr>' +
     (intPrice?'<tr><td style="color:#64748b;padding:3px 0">− Intermediary / MT</td><td style="text-align:right;color:#ef4444">'+intPrice.toFixed(2)+'</td></tr>':'')+
     '<tr><td style="color:#64748b;padding:3px 0">− Total Costs / MT</td><td style="text-align:right;color:#ef4444">'+totalCosts.toFixed(2)+'</td></tr>' +
     '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin / MT</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(net>=0?'#166534':'#991b1b')+'">'+net.toFixed(2)+'</td></tr>' +
@@ -1642,14 +1658,20 @@ function openEditOverview() {
     '<div class="form-group"><label>Intermediary</label><input id="et-intermediary" value="'+esc(t.intermediary||'')+'" /></div>' +
     '<div class="form-group"><label>We Pay Intermediary / MT</label><input id="et-int-price" type="number" value="'+esc(t.intermediary_price||'')+'" /></div>' +
     '</div>' +
-    '<div class="form-group"><label>Buy Price / MT</label><input id="et-buy-price" type="number" value="'+esc(t.buy_price||'')+'" /></div>' +
-    '<div class="form-group"><label>Buy Currency</label><select id="et-buy-cur">'+['USD','EUR','GBP','AED','INR'].map(c=>'<option'+(c===(t.buy_currency||'USD')?' selected':'')+'>'+c+'</option>').join('')+'</select></div>' +
-    '<div class="form-group"><label>Buy Payment Terms</label><input id="et-buy-terms" value="'+esc(t.buy_payment_terms||'')+'" /></div>' +
+    '<div class="form-group"><label>Supplier Price / MT</label><input id="et-buy-price" type="number" value="'+esc(t.buy_price||'')+'" /></div>' +
+    '<div class="form-group"><label>Supplier Currency</label><select id="et-buy-cur" onchange="toggleEtConv()">'+['USD','EUR','GBP','AED','INR'].map(c=>'<option'+(c===(t.buy_currency||'USD')?' selected':'')+'>'+c+'</option>').join('')+'</select></div>' +
+    '<div class="form-group"><label>Supplier Payment Terms</label><input id="et-buy-terms" value="'+esc(t.buy_payment_terms||'')+'" /></div>' +
+    '<div class="form-group" id="et-conv-wrap"'+(((t.buy_currency||'USD')==='INR')?' style="display:none"':'')+'>'+
+    '<label>Conv. Rate (₹ per 1 '+(t.buy_currency||'USD')+')</label>'+
+    '<input id="et-buy-conv" type="number" step="0.01" placeholder="optional" value="'+esc(t.buy_conversion_rate||'')+'" /></div>' +
     '<div class="form-group"><label>Buyer</label><input id="et-buyer" value="'+esc(t.buyer||'')+'" /></div>' +
     '<div class="form-group"><label>Buyer Country</label><input id="et-buyer-country" value="'+esc(t.buyer_country||'')+'" /></div>' +
-    '<div class="form-group"><label>Sell Price / MT</label><input id="et-sell-price" type="number" value="'+esc(t.sell_price||'')+'" /></div>' +
-    '<div class="form-group"><label>Sell Currency</label><select id="et-sell-cur">'+['USD','EUR','GBP','AED','INR'].map(c=>'<option'+(c===(t.sell_currency||'USD')?' selected':'')+'>'+c+'</option>').join('')+'</select></div>' +
-    '<div class="form-group"><label>Sell Payment Terms</label><input id="et-sell-terms" value="'+esc(t.sell_payment_terms||'')+'" /></div>' +
+    '<div class="form-group"><label>Buyer Price / MT</label><input id="et-sell-price" type="number" value="'+esc(t.sell_price||'')+'" /></div>' +
+    '<div class="form-group"><label>Buyer Currency</label><select id="et-sell-cur" onchange="toggleEtSellConv()">'+['USD','EUR','GBP','AED','INR'].map(c=>'<option'+(c===(t.sell_currency||'INR')?' selected':'')+'>'+c+'</option>').join('')+'</select></div>' +
+    '<div class="form-group" id="et-sell-conv-wrap"'+(((t.sell_currency||'INR')==='INR')?' style="display:none"':'')+'>'+
+    '<label>Conv. Rate (₹ per 1 '+(t.sell_currency||'INR')+')</label>'+
+    '<input id="et-sell-conv" type="number" step="0.01" placeholder="optional" value="'+esc(t.sell_conversion_rate||'')+'" /></div>' +
+    '<div class="form-group"><label>Buyer Payment Terms</label><input id="et-sell-terms" value="'+esc(t.sell_payment_terms||'')+'" /></div>' +
     '<div class="form-group"><label>Material</label><input id="et-material" value="'+esc(t.material||'')+'" /></div>' +
     '<div class="form-group"><label>Qty</label><input id="et-qty" type="number" value="'+esc(t.qty||'')+'" /></div>' +
     '<div class="form-group"><label>Unit</label><select id="et-unit">'+['MT','KG','TON'].map(u=>'<option'+(u===(t.unit||'MT')?' selected':'')+'>'+u+'</option>').join('')+'</select></div>' +
@@ -1680,14 +1702,16 @@ async function saveEditOverview() {
     supplier_country:   document.getElementById('et-supplier-country').value.trim(),
     intermediary:       (document.getElementById('et-intermediary')||{}).value||'',
     intermediary_price: (document.getElementById('et-int-price')||{}).value||'',
-    buy_price:          document.getElementById('et-buy-price').value,
-    buy_currency:       document.getElementById('et-buy-cur').value,
-    buy_payment_terms:  document.getElementById('et-buy-terms').value.trim(),
-    buyer:              document.getElementById('et-buyer').value.trim(),
-    buyer_country:      document.getElementById('et-buyer-country').value.trim(),
-    sell_price:         document.getElementById('et-sell-price').value,
-    sell_currency:      document.getElementById('et-sell-cur').value,
-    sell_payment_terms: document.getElementById('et-sell-terms').value.trim(),
+    buy_price:            document.getElementById('et-buy-price').value,
+    buy_currency:         document.getElementById('et-buy-cur').value,
+    buy_conversion_rate:  (document.getElementById('et-buy-cur').value !== 'INR' && document.getElementById('et-buy-conv').value) ? document.getElementById('et-buy-conv').value : '',
+    buy_payment_terms:    document.getElementById('et-buy-terms').value.trim(),
+    buyer:                document.getElementById('et-buyer').value.trim(),
+    buyer_country:        document.getElementById('et-buyer-country').value.trim(),
+    sell_price:           document.getElementById('et-sell-price').value,
+    sell_currency:        document.getElementById('et-sell-cur').value,
+    sell_conversion_rate: (document.getElementById('et-sell-cur').value !== 'INR' && document.getElementById('et-sell-conv').value) ? document.getElementById('et-sell-conv').value : '',
+    sell_payment_terms:   document.getElementById('et-sell-terms').value.trim(),
     material:           document.getElementById('et-material').value.trim(),
     qty:                document.getElementById('et-qty').value,
     unit:               document.getElementById('et-unit').value,
