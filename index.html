@@ -576,30 +576,38 @@ async function openTxn(id) {
   currentTxn = allTransactions.find(t=>t.id===id);
   if (!currentTxn) return;
 
-  // Promote lead tracker orders immediately so all actions use the real IMP- id
+  // Promote lead tracker orders — but only if not already promoted
   if (currentTxn._from_lead_tracker && !txnCache[id]) {
     document.getElementById('overlay').classList.add('open');
     document.getElementById('panel').classList.add('open');
     document.getElementById('panel-body').innerHTML = '<div style="padding:20px;color:#94a3b8"><span class="spinner"></span> Setting up transaction…</div>';
     const t = currentTxn;
-    const promRes = await api('addImportTransaction', {
-      order_ref: t.order_ref || t.txn_ref,
-      buy_direct: 'yes',
-      supplier: t.supplier, supplier_country: t.supplier_country,
-      buy_price: t.buy_price, buy_currency: t.buy_currency, buy_payment_terms: t.buy_payment_terms,
-      buyer: t.buyer, buyer_country: t.buyer_country,
-      sell_price: t.sell_price, sell_currency: t.sell_currency, sell_payment_terms: t.sell_payment_terms,
-      material: t.material, qty: t.qty, unit: t.unit,
-      incoterms: t.incoterms, vessel: t.vessel, container: t.container, bl: t.bl,
-      port_loading: t.port_loading, port_discharge: t.port_discharge,
-      etd: t.etd, eta: t.eta, stage: t.stage || 'Confirmation',
-      notes: t.notes, assigned_to: t.assigned_to,
-      by: currentUser
-    });
-    if (promRes.success) {
+    const orderRef = t.order_ref || t.txn_ref;
+    // Check if already promoted (same order_ref exists in ImportTransactions)
+    const existing = allTransactions.find(t2 => !t2._from_lead_tracker && t2.order_ref === orderRef);
+    let promId = existing ? existing.id : null;
+    let promRef = existing ? existing.txn_ref : null;
+    if (!existing) {
+      const promRes = await api('addImportTransaction', {
+        order_ref: orderRef,
+        buy_direct: 'yes',
+        supplier: t.supplier, supplier_country: t.supplier_country,
+        buy_price: t.buy_price, buy_currency: t.buy_currency, buy_payment_terms: t.buy_payment_terms,
+        buyer: t.buyer, buyer_country: t.buyer_country,
+        sell_price: t.sell_price, sell_currency: t.sell_currency, sell_payment_terms: t.sell_payment_terms,
+        material: t.material, qty: t.qty, unit: t.unit,
+        incoterms: t.incoterms, vessel: t.vessel, container: t.container, bl: t.bl,
+        port_loading: t.port_loading, port_discharge: t.port_discharge,
+        etd: t.etd, eta: t.eta, stage: t.stage || 'Confirmation',
+        notes: t.notes, assigned_to: t.assigned_to,
+        by: currentUser
+      });
+      if (promRes.success) { promId = promRes.id; promRef = promRes.txn_ref; }
+    }
+    if (promId) {
       const idx = allTransactions.findIndex(t2=>t2.id===id);
-      if (idx>=0) allTransactions[idx] = Object.assign({}, allTransactions[idx], {id: promRes.id, txn_ref: promRes.txn_ref, _from_lead_tracker: false});
-      currentTxn = allTransactions.find(t2=>t2.id===promRes.id) || currentTxn;
+      if (idx>=0) allTransactions[idx] = Object.assign({}, allTransactions[idx], {id: promId, txn_ref: promRef, _from_lead_tracker: false});
+      currentTxn = allTransactions.find(t2=>t2.id===promId) || currentTxn;
       id = currentTxn.id;
       localStorage.removeItem('imp_transactions');
     }
