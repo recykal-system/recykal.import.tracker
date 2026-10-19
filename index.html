@@ -615,10 +615,12 @@ function liveTrackingCell(t) {
   const d = liveTracking[cn];
   if (trackingLoading) return '<span style="color:#94a3b8"><span class="spinner"></span></span>';
   if (!d) return '<span style="color:#94a3b8;font-size:10px">Not in Shipsgo</span>';
+  // Shipsgo v2 export fields: container, status, carrier, date_of_discharge (ETA at POD)
   const status = d.status || d.shipment_status || '';
-  const eta = d.estimated_arrival || d.eta_date || d.destination_eta || d.pod_date || d.eta || '';
+  const eta = d.date_of_discharge || d.estimated_arrival || d.eta_date || d.destination_eta || d.pod_date || d.eta || '';
   const vessel = d.vessel_name || d.current_vessel || d.vessel || '';
   const carrier = d.carrier || d.shipping_line || '';
+  const pod = d.port_of_discharge || d.pod || '';
   const sl = status.toLowerCase();
   const statusColor = (sl.includes('arriv')||sl.includes('discharg')||sl.includes('deliver')) ? '#166534'
     : (sl.includes('sail')||sl.includes('transit')||sl.includes('route')||sl.includes('ship')) ? '#1d4ed8'
@@ -627,7 +629,7 @@ function liveTrackingCell(t) {
   return '<div style="line-height:1.5">' +
     (status ? '<span style="color:'+statusColor+';font-weight:700;font-size:11px">'+esc(status)+'</span>' : '') +
     (eta ? '<div style="color:#64748b;font-size:10px">ETA '+fmtDate(eta)+'</div>' : '') +
-    ((vessel||carrier) ? '<div style="color:#94a3b8;font-size:10px">'+esc(vessel||(carrier?'via '+carrier:''))+'</div>' : '') +
+    ((carrier||pod) ? '<div style="color:#94a3b8;font-size:10px">'+esc(carrier+(pod?' → '+pod:''))+'</div>' : '') +
     '</div>';
 }
 
@@ -637,13 +639,23 @@ async function refreshAllTracking() {
   trackingLoading = true;
   renderTable(currentFiltered || allTransactions);
   try {
-    const res = await api('getAllContainerTracking', {}).catch(function(){ return {}; });
+    const res = await api('getAllContainerTracking', {}).catch(function(e){ console.error('Tracking API error', e); return {}; });
+    if (res && res.error) console.error('Shipsgo error:', res.error);
     if (res && res.shipments) {
       liveTracking = {};
+      if (res.shipments.length) console.log('Shipsgo sample shipment fields:', Object.keys(res.shipments[0]), res.shipments[0]);
       res.shipments.forEach(function(s) {
-        const cn = (s.container_number || s.containerNumber || '').toUpperCase().replace(/\s/g,'');
+        // Shipsgo v2: field is "container" (confirmed from data export)
+        const cn = (s.container || s.container_number || s.containerNumber || s.container_no || '').toUpperCase().replace(/\s/g,'');
         if (cn) liveTracking[cn] = s;
+        // Safety net: also index any string value that looks like a container number
+        Object.values(s).forEach(function(v) {
+          if (typeof v === 'string' && /^[A-Z]{4}\d{7}$/i.test(v.trim())) {
+            liveTracking[v.trim().toUpperCase()] = s;
+          }
+        });
       });
+      console.log('Live tracking keys:', Object.keys(liveTracking));
     }
   } catch(e) { console.error('Tracking fetch error', e); }
   trackingLoading = false;
@@ -788,19 +800,18 @@ async function openTxn(id) {
       lineItems: lr.items || []
     };
     saveTxnCache(id);
-    // Update docs count in home page table row
+    // Patch docs count into allTransactions and re-render table row
     const approved = freshDocs.filter(function(d){ return d.status==='Approved'; }).length;
     const txnRow = allTransactions.find(function(x){ return x.id===id; });
     if (txnRow) {
       txnRow.docs_total = freshDocs.length;
       txnRow.docs_approved = approved;
-      const cell = document.querySelector('#txn-body tr td[id]'); // update docs cell in row
-      const row = document.querySelector('tr[onclick*="\''+id+'\'"]');
-      if (row) {
-        const cells = row.querySelectorAll('td');
-        // docs is 2nd from last visible column
-        const docsCell = cells[cells.length - 2];
-        if (docsCell) docsCell.textContent = approved+'/'+freshDocs.length+' docs';
+      // Update just the docs cell directly using the live-{id} sibling
+      const liveCell = document.getElementById('live-'+id);
+      if (liveCell && liveCell.parentElement) {
+        const cells = liveCell.parentElement.querySelectorAll('td');
+        // docs column = 2nd from last (before Updated)
+        if (cells.length >= 2) cells[cells.length - 2].textContent = approved+'/'+freshDocs.length+' docs';
       }
     }
     // Re-render only if this transaction is still open
