@@ -790,14 +790,11 @@ function renderOverview(t, cache) {
 
   // Use per-line-item prices when line items exist, else fall back to transaction scalars
   let buyPrice, qty, totalNetMargin, useLineItems = false;
-  if (lineItems.length && lineItems.some(li => li.buyer_price)) {
-    const totSup = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.price||0),0);
-    const totBuy = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.buyer_price||0),0);
-    qty = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
-    buyPrice = qty ? totSup/qty : 0; // only used for display label
-    const netTotal = totBuy - totSup - totalCosts * qty;
-    totalNetMargin = netTotal;
+  if (lineItems.length) {
     useLineItems = true;
+    qty = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
+    buyPrice = 0;
+    totalNetMargin = null;
   } else {
     buyPrice = parseFloat(t.buy_price||0);
     qty = parseFloat(t.qty||0);
@@ -894,12 +891,14 @@ function renderOverview(t, cache) {
       const totBuy = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.buyer_price||0),0);
       const totQty = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
       const cur = lineItems[0] && lineItems[0].currency || t.buy_currency || 'USD';
+      const hasBuy = lineItems.some(function(li){ return parseFloat(li.buyer_price||0) > 0; });
       const gross = totBuy - totSup;
       const net = gross - totalCosts * totQty;
-      return '<tr><td style="padding:3px 0">Total Buyer Value</td><td style="text-align:right;font-weight:700">'+cur+' '+totBuy.toFixed(0)+'</td></tr>' +
-        '<tr><td style="color:#64748b;padding:3px 0">− Total Supplier Value</td><td style="text-align:right;color:#ef4444">'+totSup.toFixed(0)+'</td></tr>' +
+      return (hasBuy ? '<tr><td style="padding:3px 0">Total Buyer Value</td><td style="text-align:right;font-weight:700">'+cur+' '+totBuy.toFixed(0)+'</td></tr>' : '') +
+        '<tr><td style="color:#64748b;padding:3px 0">Total Supplier Value</td><td style="text-align:right;font-weight:700;color:#1e3a5f">'+cur+' '+totSup.toFixed(0)+'</td></tr>' +
+        lineItems.map(function(li){ return '<tr><td style="color:#94a3b8;padding:2px 0 2px 12px;font-size:11px">'+esc(li.material||'')+'</td><td style="text-align:right;color:#64748b;font-size:11px">'+parseFloat(li.qty||0).toFixed(3).replace(/\.?0+$/,'')+' MT × '+parseFloat(li.price||0).toLocaleString()+' = '+cur+' '+(parseFloat(li.qty||0)*parseFloat(li.price||0)).toFixed(0)+'</td></tr>'; }).join('') +
         (totalCosts?'<tr><td style="color:#64748b;padding:3px 0">− Total Costs</td><td style="text-align:right;color:#ef4444">'+(totalCosts*totQty).toFixed(0)+'</td></tr>':'') +
-        '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin ('+totQty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(net>=0?'#166534':'#991b1b')+'">'+net.toFixed(0)+'</td></tr>';
+        (hasBuy ? '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin ('+totQty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(net>=0?'#166534':'#991b1b')+'">'+net.toFixed(0)+'</td></tr>' : '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700;color:#94a3b8" colspan="2">Add buyer prices to see margin</td></tr>');
     })() :
       '<tr><td style="padding:3px 0">Buyer Price / MT</td><td style="text-align:right;font-weight:700">'+esc(t.sell_currency||'INR')+' '+sellPrice.toFixed(2)+'</td></tr>' +
       '<tr><td style="color:#64748b;padding:3px 0">− Supplier Price / MT</td><td style="text-align:right;color:#ef4444">'+buyPrice.toFixed(2)+'</td></tr>' +
