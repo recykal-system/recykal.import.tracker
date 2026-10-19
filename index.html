@@ -219,7 +219,7 @@ td { padding: 9px 12px; vertical-align: middle; }
   <table>
     <thead><tr>
       <th></th><th>Txn Ref</th><th>Order Ref</th><th>Supplier</th><th>Buyer</th>
-      <th>Material</th><th>Qty</th><th>Stage</th><th>ETD</th><th>ETA</th>
+      <th>Material</th><th>Qty</th><th>Stage</th><th>ETD</th><th>ETA / Container</th>
       <th>Assigned To</th><th>Docs</th><th>Updated</th>
     </tr></thead>
     <tbody id="txn-body">
@@ -620,7 +620,7 @@ function renderTable(txns) {
       '<td style="font-size:11px">'+txnTotalQty(t)+'</td>' +
       '<td><span class="badge badge-'+(STAGE_CLASS[t.stage]||'confirmation')+'">'+esc(t.stage||'Confirmation')+'</span></td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.etd)+'</td>' +
-      '<td style="font-size:11px;color:#64748b">'+fmtDate(t.eta)+'</td>' +
+      '<td style="font-size:11px">'+etaCell(t)+'</td>' +
       '<td style="font-size:11px">'+esc(t.assigned_to||'—')+'</td>' +
       '<td style="font-size:11px;color:#64748b">'+docsHtml+'</td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.updated_at)+'</td></tr>';
@@ -915,11 +915,9 @@ function renderOverview(t, cache) {
     '<div class="panel-section" id="tracking-section">' +
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
     '<h3 style="margin:0">Container Tracking</h3>' +
-    '<div style="display:flex;gap:6px">' +
-    (t.container?'<a href="https://www.track-trace.com/container/'+esc(t.container)+'" target="_blank" class="btn-sm" style="text-decoration:none">Open on Track-Trace ↗</a>':'') +
-    (t.container?'<button class="btn-sm primary" onclick="loadTracking(\''+esc(t.container)+'\')">Refresh</button>':'') +
-    '</div></div>' +
-    '<div id="tracking-body">'+(t.container?'<div style="color:#94a3b8;font-size:12px">Click Refresh to load live status.</div>':'<div style="color:#94a3b8;font-size:12px">No container number on this transaction.</div>')+'</div>' +
+    (t.container?'<button class="btn-sm primary" onclick="loadTracking(\''+esc(t.container)+'\')">Refresh via Shipsgo</button>':'') +
+    '</div>' +
+    '<div id="tracking-body">'+(t.container?'<div style="color:#94a3b8;font-size:12px">Click Refresh to load live status from Shipsgo.</div>':'<div style="color:#94a3b8;font-size:12px">No container number on this transaction.</div>')+'</div>' +
     '</div>' +
     '<div class="panel-section">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Drive Links</h3><button class="btn-sm" onclick="openAddDealLink()">+ Add Link</button></div>' +
@@ -2043,6 +2041,24 @@ function fmtDateTime(val) {
   try { return new Date(val).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e) { return '—'; }
 }
 function capitalize(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : ''; }
+
+function etaCell(t) {
+  let html = '';
+  if (t.eta) {
+    const days = Math.ceil((new Date(t.eta) - new Date()) / 86400000);
+    let col = '#64748b', label = '';
+    if (days < 0) { col = '#ef4444'; label = ' <span style="color:#ef4444;font-weight:600">('+Math.abs(days)+'d late)</span>'; }
+    else if (days <= 7) { col = '#f59e0b'; label = ' <span style="color:#f59e0b;font-weight:600">('+days+'d)</span>'; }
+    else { label = ' <span style="color:#22c55e;font-weight:600">('+days+'d)</span>'; }
+    html += '<div style="color:'+col+'">'+fmtDate(t.eta)+label+'</div>';
+  } else {
+    html += '<div style="color:#94a3b8">—</div>';
+  }
+  if (t.container) {
+    html += '<div style="font-size:10px;color:#64748b;font-family:monospace;margin-top:1px">'+esc(t.container)+'</div>';
+  }
+  return html;
+}
 </script>
 </body>
 </html>
