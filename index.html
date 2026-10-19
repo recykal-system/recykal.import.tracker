@@ -211,6 +211,7 @@ td { padding: 9px 12px; vertical-align: middle; }
   </div>
   <div class="filter-group"><label>Material</label><input type="text" id="f-material" placeholder="e.g. Milberry..." oninput="applyFilters()" /></div>
   <button class="btn-clear" onclick="clearFilters()">Clear</button>
+  <button id="refresh-tracking-btn" class="btn-clear" onclick="refreshAllTracking()" style="border-color:#1e3a5f;color:#1e3a5f" title="Fetch live status from Shipsgo for all containers">⟳ Live Tracking</button>
   <button class="btn-add" onclick="openAddModal()">+ New Transaction</button>
 </div>
 
@@ -220,10 +221,11 @@ td { padding: 9px 12px; vertical-align: middle; }
     <thead><tr>
       <th></th><th>Txn Ref</th><th>Order Ref</th><th>Supplier</th><th>Buyer</th>
       <th>Material</th><th>Qty</th><th>Stage</th><th>ETD</th><th>ETA / Container</th>
+      <th style="min-width:130px">Live Status</th>
       <th>Assigned To</th><th>Docs</th><th>Updated</th>
     </tr></thead>
     <tbody id="txn-body">
-      <tr class="loading-row"><td colspan="13"><span class="spinner"></span> Loading…</td></tr>
+      <tr class="loading-row"><td colspan="14"><span class="spinner"></span> Loading…</td></tr>
     </tbody>
   </table>
 </div>
@@ -540,15 +542,16 @@ async function fetchTransactions() {
 async function loadTransactions() {
   const cached = localStorage.getItem('imp_transactions');
   if (cached) { try { allTransactions = JSON.parse(cached); applyFilters(); } catch(e){} }
-  else { document.getElementById('txn-body').innerHTML = '<tr class="loading-row"><td colspan="13"><span class="spinner"></span> Loading…</td></tr>'; }
+  else { document.getElementById('txn-body').innerHTML = '<tr class="loading-row"><td colspan="14"><span class="spinner"></span> Loading…</td></tr>'; }
   try {
     const r = await fetchTransactions();
     if (r.error) throw new Error(r.error);
     allTransactions = r.transactions || [];
     localStorage.setItem('imp_transactions', JSON.stringify(allTransactions));
     applyFilters();
+    refreshAllTracking(); // auto-load live tracking after transactions
   } catch(e) {
-    if (!cached) document.getElementById('txn-body').innerHTML = '<tr class="empty-row"><td colspan="13" style="color:#ef4444">Could not connect: ' + e.message + '</td></tr>';
+    if (!cached) document.getElementById('txn-body').innerHTML = '<tr class="empty-row"><td colspan="14" style="color:#ef4444">Could not connect: ' + e.message + '</td></tr>';
   }
 }
 
@@ -558,14 +561,15 @@ function applyFilters() {
   const rag      = document.getElementById('f-rag').value;
   const assigned = document.getElementById('f-assigned').value;
   const mat      = document.getElementById('f-material').value.toLowerCase();
-  renderTable(allTransactions.filter(function(t) {
+  currentFiltered = allTransactions.filter(function(t) {
     if (search && ![(t.txn_ref||''),(t.order_ref||''),(t.supplier||''),(t.buyer||'')].some(v=>v.toLowerCase().includes(search))) return false;
     if (stage && t.stage !== stage) return false;
     if (rag && t.rag !== rag) return false;
     if (assigned && t.assigned_to !== assigned) return false;
     if (mat && !(t.material||'').toLowerCase().includes(mat)) return false;
     return true;
-  }));
+  });
+  renderTable(currentFiltered);
 }
 
 function clearFilters() {
@@ -601,9 +605,54 @@ function txnTotalQty(t) {
   return t.qty ? (t.qty + ' ' + (t.unit||'MT')) : '—';
 }
 
+// --- Live Tracking ---
+let liveTracking = {}; // container# → Shipsgo data
+let trackingLoading = false;
+
+function liveTrackingCell(t) {
+  if (!t.container) return '<span style="color:#cbd5e1">—</span>';
+  const cn = t.container.toUpperCase().replace(/\s/g,'');
+  const d = liveTracking[cn];
+  if (trackingLoading && !d) return '<span style="color:#94a3b8"><span class="spinner"></span></span>';
+  if (!d) return '<span style="color:#94a3b8;font-size:10px">click ⟳</span>';
+  const status = d.status || d.shipment_status || '';
+  const eta = d.estimated_arrival || d.eta_date || d.eta || '';
+  const vessel = d.vessel_name || d.current_vessel || '';
+  const statusColor = status.includes('ARRIVED')||status.includes('DISCHARG') ? '#166534'
+    : status.includes('EN_ROUTE')||status.includes('TRANSIT')||status.includes('SHIPPING') ? '#1d4ed8'
+    : status.includes('DELAY') ? '#ef4444' : '#475569';
+  return '<div style="line-height:1.4">' +
+    (status ? '<span style="color:'+statusColor+';font-weight:600;font-size:11px">'+esc(status.replace(/_/g,' '))+'</span>' : '') +
+    (eta ? '<div style="color:#64748b;font-size:10px">ETA '+fmtDate(eta)+'</div>' : '') +
+    (vessel ? '<div style="color:#94a3b8;font-size:10px">'+esc(vessel)+'</div>' : '') +
+    '</div>';
+}
+
+async function refreshAllTracking() {
+  const btn = document.getElementById('refresh-tracking-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Loading…'; }
+  trackingLoading = true;
+  renderTable(currentFiltered || allTransactions);
+  try {
+    const res = await safe(api('getAllContainerTracking', {}));
+    if (res && res.shipments) {
+      liveTracking = {};
+      res.shipments.forEach(function(s) {
+        const cn = (s.container_number || s.containerNumber || '').toUpperCase().replace(/\s/g,'');
+        if (cn) liveTracking[cn] = s;
+      });
+    }
+  } catch(e) { console.error('Tracking fetch error', e); }
+  trackingLoading = false;
+  if (btn) { btn.disabled = false; btn.textContent = '⟳ Live Tracking'; }
+  renderTable(currentFiltered || allTransactions);
+}
+
+let currentFiltered = null;
+
 function renderTable(txns) {
   const tbody = document.getElementById('txn-body');
-  if (!txns.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="13">No transactions yet. Click "+ New Transaction" to start.</td></tr>'; return; }
+  if (!txns.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="14">No transactions yet. Click "+ New Transaction" to start.</td></tr>'; return; }
   tbody.innerHTML = txns.map(function(t) {
     const rag = t.rag || 'grey';
     const docsTotal = parseInt(t.docs_total||0);
@@ -621,6 +670,7 @@ function renderTable(txns) {
       '<td><span class="badge badge-'+(STAGE_CLASS[t.stage]||'confirmation')+'">'+esc(t.stage||'Confirmation')+'</span></td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.etd)+'</td>' +
       '<td style="font-size:11px">'+etaCell(t)+'</td>' +
+      '<td style="font-size:11px" id="live-'+t.id+'">'+liveTrackingCell(t)+'</td>' +
       '<td style="font-size:11px">'+esc(t.assigned_to||'—')+'</td>' +
       '<td style="font-size:11px;color:#64748b">'+docsHtml+'</td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.updated_at)+'</td></tr>';
