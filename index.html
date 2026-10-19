@@ -901,12 +901,14 @@ function renderOverview(t, cache) {
         (totalCosts?'<tr><td style="color:#64748b;padding:3px 0">− Total Costs</td><td style="text-align:right;color:#ef4444">'+(totalCosts*totQty).toFixed(0)+'</td></tr>':'') +
         (hasBuy ? '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin ('+totQty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(net>=0?'#166534':'#991b1b')+'">'+net.toFixed(0)+'</td></tr>' : '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700;color:#94a3b8" colspan="2">Add buyer prices to see margin</td></tr>');
     })() :
-      '<tr><td style="padding:3px 0">Buyer Price / MT</td><td style="text-align:right;font-weight:700">'+esc(t.sell_currency||'INR')+' '+sellPrice.toFixed(2)+'</td></tr>' +
-      '<tr><td style="color:#64748b;padding:3px 0">− Supplier Price / MT</td><td style="text-align:right;color:#ef4444">'+buyPrice.toFixed(2)+'</td></tr>' +
+      (buyPrice>0?'<tr><td style="color:#64748b;padding:3px 0">Supplier Price / MT</td><td style="text-align:right;font-weight:700;color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+'</td></tr>':'') +
       (intPrice?'<tr><td style="color:#64748b;padding:3px 0">− Intermediary / MT</td><td style="text-align:right;color:#ef4444">'+intPrice.toFixed(2)+'</td></tr>':'') +
-      '<tr><td style="color:#64748b;padding:3px 0">− Total Costs / MT</td><td style="text-align:right;color:#ef4444">'+(totalCosts > 0 ? totalCosts.toFixed(2) : '0.00')+'</td></tr>' +
-      '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin / MT</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+((sellPrice-buyPrice-totalCosts)>=0?'#166534':'#991b1b')+'">'+((sellPrice-buyPrice-totalCosts)).toFixed(2)+'</td></tr>' +
-      (totalNetMargin!==null?'<tr><td style="color:#64748b;padding:3px 0">Total Net ('+qty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:700;color:'+(totalNetMargin>=0?'#166534':'#991b1b')+'">'+totalNetMargin.toFixed(0)+'</td></tr>':'')
+      (sellPrice>0?
+        '<tr><td style="padding:3px 0">Buyer Price / MT</td><td style="text-align:right;font-weight:700">'+esc(t.sell_currency||'INR')+' '+sellPrice.toFixed(2)+'</td></tr>' +
+        (totalCosts>0?'<tr><td style="color:#64748b;padding:3px 0">− Total Costs / MT</td><td style="text-align:right;color:#ef4444">'+totalCosts.toFixed(2)+'</td></tr>':'') +
+        '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin / MT</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+((sellPrice-buyPrice-totalCosts)>=0?'#166534':'#991b1b')+'">'+((sellPrice-buyPrice-totalCosts)).toFixed(2)+'</td></tr>' +
+        (totalNetMargin!==null?'<tr><td style="color:#64748b;padding:3px 0">Total Net ('+qty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:700;color:'+(totalNetMargin>=0?'#166534':'#991b1b')+'">'+totalNetMargin.toFixed(0)+'</td></tr>':'')
+      : '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700;color:#94a3b8" colspan="2">Add buyer price to see margin</td></tr>')
     ) +
     '</table>' +
     '</div>' +
