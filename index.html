@@ -705,19 +705,16 @@ async function openTxn(id) {
     const dataId = id;
     const fallbackId = (origOrdForData && origOrdForData !== id) ? origOrdForData : null;
     const safe = fn => fn.catch(() => ({}));
-    const [dr, pr, cr, tr, lr] = await Promise.all([
-      safe(api('getImportDocs',      {txn_id: dataId})),
-      safe(api('getImportPayments',  {txn_id: dataId})),
-      safe(api('getImportCosts',     {txn_id: dataId})),
-      safe(api('getImportTimeline',  {txn_id: dataId})),
-      safe(api('getImportLineItems', {txn_id: dataId}))
-    ]);
-    let payments = pr.payments || [];
-    let costs = cr.costs || [];
+    const detail = await safe(api('getImportTxnDetail', {txn_id: dataId}));
+    let payments = detail.payments || [];
+    let costs = detail.costs || [];
+    const lr = { items: detail.items || [] };
+    const tr = { timeline: detail.timeline || [] };
+    const dr = { docs: detail.docs || [] };
     if (fallbackId) {
       const [pr2, cr2] = await Promise.all([
-        api('getImportPayments', {txn_id: fallbackId}),
-        api('getImportCosts',    {txn_id: fallbackId})
+        safe(api('getImportPayments', {txn_id: fallbackId})),
+        safe(api('getImportCosts',    {txn_id: fallbackId}))
       ]);
       payments = payments.concat(pr2.payments || []);
       costs    = costs.concat(cr2.costs || []);
