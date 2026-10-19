@@ -871,7 +871,7 @@ function renderOverview(t, cache) {
     '<div class="panel-section"><h3>Buy Side</h3>' +
     '<div class="info-row"><span><strong>Supplier:</strong> '+esc(t.supplier||'—')+'</span><span><strong>Country:</strong> '+esc(t.supplier_country||'—')+'</span></div>' +
     (t.buy_direct==='no'?'<div class="info-row"><span><strong>Via Intermediary:</strong> '+esc(t.intermediary||'—')+'</span><span><strong>We Pay Intermediary:</strong> '+esc(t.buy_currency||'USD')+' '+esc(t.intermediary_price||'—')+'/MT</span></div>':'')+
-    '<div class="info-row"><span><strong>Supplier Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+(ordLineItems.length>1?' <span style="font-size:10px;color:#64748b;font-weight:400">(wtd. avg)</span>':'')+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
+    '<div class="info-row"><span><strong>Supplier Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+(lineItems.length>1?' <span style="font-size:10px;color:#64748b;font-weight:400">(wtd. avg)</span>':'')+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
     '</div>' +
     '<div class="panel-section"><h3>Sell Side</h3>' +
     '<div class="info-row"><span><strong>Buyer:</strong> '+esc(t.buyer||'—')+'</span><span><strong>Country:</strong> '+esc(t.buyer_country||'—')+'</span></div>' +
