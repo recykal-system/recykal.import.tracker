@@ -854,7 +854,10 @@ function renderOverview(t, cache) {
           '<td style="padding:5px 6px;text-align:right">'+(bp?bp.toLocaleString():'<span style="color:#94a3b8">—</span>')+'</td>' +
           '<td style="padding:5px 6px;color:#64748b;font-size:11px">'+esc(li.currency||'USD')+'</td>' +
           '<td style="padding:5px 6px;text-align:right;font-weight:600;color:'+(margin>=0?'#166534':'#991b1b')+'">'+(bp?(margin>=0?'+':'')+margin.toFixed(0):'<span style="color:#94a3b8">—</span>')+'</td>' +
-          '<td style="padding:5px 4px"><button onclick="deleteLineItem(\''+esc(li.id)+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px" title="Remove">×</button></td>' +
+          '<td style="padding:5px 4px;display:flex;gap:4px">' +
+          '<button onclick="editLineItemBuyerPrice(\''+esc(li.id)+'\',\''+esc(li.material)+'\',\''+bp+'\')" style="background:none;border:1px solid #cbd5e1;border-radius:3px;color:#475569;cursor:pointer;font-size:10px;padding:1px 5px" title="Set buyer price">✎</button>' +
+          '<button onclick="deleteLineItem(\''+esc(li.id)+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px" title="Remove">×</button>' +
+          '</td>' +
           '</tr>';
       }).join('') +
       (function(){
@@ -983,6 +986,24 @@ async function saveLineItem() {
     renderPanelTab('overview');
     showToast('Line item saved');
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
+}
+
+function editLineItemBuyerPrice(id, material, currentBp) {
+  const val = prompt('Buyer Price / MT for ' + material + ' (' + (currentTxn.sell_currency||'USD') + '):', currentBp||'');
+  if (val === null) return;
+  const bp = parseFloat(val);
+  if (isNaN(bp) || bp < 0) { showToast('Invalid price', 'error'); return; }
+  api('updateImportLineItem', { id, buyer_price: String(bp), by: currentUser }).then(function(res) {
+    if (res.success) {
+      const cache = txnCache[currentTxn.id];
+      if (cache && cache.lineItems) {
+        const li = cache.lineItems.find(function(l){ return l.id === id; });
+        if (li) li.buyer_price = String(bp);
+      }
+      renderPanelTab('overview');
+      showToast('Buyer price updated');
+    } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
+  });
 }
 
 async function importLineItemsFromOrder() {
