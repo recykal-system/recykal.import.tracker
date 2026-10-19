@@ -616,11 +616,12 @@ function liveTrackingCell(t) {
   if (trackingLoading) return '<span style="color:#94a3b8"><span class="spinner"></span></span>';
   if (!d) return '<span style="color:#94a3b8;font-size:10px">Not in Shipsgo</span>';
   // Shipsgo v2 export fields: container, status, carrier, date_of_discharge (ETA at POD)
-  const status = d.status || d.shipment_status || '';
-  const eta = d.date_of_discharge || d.estimated_arrival || d.eta_date || d.destination_eta || d.pod_date || d.eta || '';
-  const vessel = d.vessel_name || d.current_vessel || d.vessel || '';
-  const carrier = d.carrier || d.shipping_line || '';
-  const pod = d.port_of_discharge || d.pod || '';
+  function strVal(v) { return v ? (typeof v === 'object' ? (v.name || v.code || v.title || JSON.stringify(v)) : String(v)) : ''; }
+  const status = strVal(d.status || d.shipment_status);
+  const eta = strVal(d.date_of_discharge || d.estimated_arrival || d.eta_date || d.destination_eta || d.pod_date || d.eta);
+  const vessel = strVal(d.vessel_name || d.current_vessel || d.vessel);
+  const carrier = strVal(d.carrier || d.shipping_line);
+  const pod = strVal(d.port_of_discharge || d.pod);
   const sl = status.toLowerCase();
   const statusColor = (sl.includes('arriv')||sl.includes('discharg')||sl.includes('deliver')) ? '#166534'
     : (sl.includes('sail')||sl.includes('transit')||sl.includes('route')||sl.includes('ship')) ? '#1d4ed8'
