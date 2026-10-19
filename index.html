@@ -550,6 +550,19 @@ async function loadTransactions() {
     localStorage.setItem('imp_transactions', JSON.stringify(allTransactions));
     applyFilters();
     refreshAllTracking(); // auto-load live tracking after transactions
+    // Background: load all doc counts so home table shows correct values without opening each transaction
+    api('getAllDocsCounts', {}).then(function(cr) {
+      if (!cr || !cr.counts) return;
+      var changed = false;
+      [allTransactions, currentFiltered].forEach(function(arr) {
+        if (!arr) return;
+        arr.forEach(function(t) {
+          var c = cr.counts[t.id];
+          if (c) { t.docs_total = c.total; t.docs_approved = c.approved; changed = true; }
+        });
+      });
+      if (changed) renderTable(currentFiltered || allTransactions);
+    }).catch(function(){});
   } catch(e) {
     if (!cached) document.getElementById('txn-body').innerHTML = '<tr class="empty-row"><td colspan="12" style="color:#ef4444">Could not connect: ' + e.message + '</td></tr>';
   }
