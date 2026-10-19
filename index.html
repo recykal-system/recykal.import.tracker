@@ -825,7 +825,14 @@ function renderOverview(t, cache) {
     '</div>' +
     '<div class="panel-section" id="line-items-section">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
-    '<h3 style="margin:0">Line Items</h3><button class="btn-sm primary" onclick="openAddLineItem()">+ Add</button></div>' +
+    '<h3 style="margin:0">Line Items</h3>' +
+    '<div style="display:flex;gap:6px">' +
+    (function(){
+      const ord = t.order_ref ? ordersMap[t.order_ref] : null;
+      const ordLi = ord && ord.line_items ? (typeof ord.line_items==='string'?JSON.parse(ord.line_items):ord.line_items) : [];
+      return (!lineItems.length && ordLi.length) ? '<button class="btn-sm" onclick="importLineItemsFromOrder()">↓ Import from Order</button>' : '';
+    })() +
+    '<button class="btn-sm primary" onclick="openAddLineItem()">+ Add</button></div></div>' +
     (lineItems.length ?
       '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
       '<thead><tr style="background:#f1f5f9">' +
@@ -976,6 +983,42 @@ async function saveLineItem() {
     renderPanelTab('overview');
     showToast('Line item saved');
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
+}
+
+async function importLineItemsFromOrder() {
+  const t = currentTxn;
+  const ord = t.order_ref ? ordersMap[t.order_ref] : null;
+  if (!ord || !ord.line_items) { showToast('No order line items found', 'error'); return; }
+  const ordLi = typeof ord.line_items === 'string' ? JSON.parse(ord.line_items) : ord.line_items;
+  if (!ordLi.length) { showToast('Order has no line items', 'error'); return; }
+  showToast('Importing ' + ordLi.length + ' line items…');
+  let saved = 0;
+  for (const li of ordLi) {
+    const qty = li.qty || '';
+    const price = li.supplier_price || li.price || '';
+    const amount = (qty && price ? (parseFloat(qty)*parseFloat(price)).toFixed(2) : '');
+    const payload = {
+      txn_id: t.id,
+      material: li.material || '',
+      hsn: li.hsn || '',
+      qty,
+      unit: li.unit || 'MT',
+      price,
+      buyer_price: li.buyer_price || '',
+      currency: t.buy_currency || 'USD',
+      amount,
+      by: currentUser
+    };
+    const res = await api('addImportLineItem', payload);
+    if (res.success) {
+      payload.id = res.id;
+      if (txnCache[t.id]) txnCache[t.id].lineItems = (txnCache[t.id].lineItems||[]).concat(payload);
+      saved++;
+    }
+  }
+  showToast(saved + ' line items imported');
+  invalidateTxnCache(t.id);
+  renderPanelTab('overview');
 }
 
 async function loadTracking(containerNo) {
