@@ -358,7 +358,8 @@ const ALLOWED_DOMAIN = 'recykal.com';
 let currentToken = '', currentUser = '';
 let allTransactions = [], currentTxn = null, currentPanelTab = 'overview';
 let txnCache = {}; // id -> {docs, payments, costs, timeline, lineItems}
-const TXN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const TXN_CACHE_TTL     = 10 * 60 * 1000; // 10 minutes — show cached, skip network if fresh
+const TXN_CACHE_REFRESH =  2 * 60 * 1000; // 2 minutes — background-refresh if older than this
 
 function saveTxnCache(id) {
   try { localStorage.setItem('imp_txn_'+id, JSON.stringify({data: txnCache[id], ts: Date.now()})); } catch(e) {}
@@ -369,7 +370,7 @@ function loadTxnCache(id) {
     if (!raw) return null;
     const entry = JSON.parse(raw);
     if (Date.now() - entry.ts > TXN_CACHE_TTL) { localStorage.removeItem('imp_txn_'+id); return null; }
-    return entry.data;
+    return entry; // return full entry so caller can check .ts
   } catch(e) { return null; }
 }
 function invalidateTxnCache(id) {
@@ -682,14 +683,13 @@ async function openTxn(id) {
   ['overview','timeline','documents','payments','costs'].forEach(t=>{
     document.getElementById('ptab-'+t).classList.toggle('active', t==='overview');
   });
-  // Restore from localStorage immediately (instant render), then refresh in background
+  // Restore from localStorage immediately (instant render), then refresh in background if stale
+  let cacheAge = Infinity;
   if (!txnCache[id]) {
-    const persisted = loadTxnCache(id);
-    // Discard cached entry if docs are empty — forces a fresh network fetch
-    if (persisted && persisted.docs && persisted.docs.length > 0) {
-      txnCache[id] = persisted;
-    } else if (persisted) {
-      try { localStorage.removeItem('imp_txn_'+id); } catch(e) {}
+    const entry = loadTxnCache(id);
+    if (entry && entry.data) {
+      txnCache[id] = entry.data;
+      cacheAge = Date.now() - (entry.ts || 0);
     }
   }
   if (txnCache[id]) {
@@ -697,7 +697,9 @@ async function openTxn(id) {
   } else {
     document.getElementById('panel-body').innerHTML = '<div style="padding:20px;color:#94a3b8"><span class="spinner"></span> Loading…</div>';
   }
-  // Always refresh from network in background (updates cache silently)
+  // Skip background network fetch if cache is fresh (< 2 min old)
+  if (cacheAge < TXN_CACHE_REFRESH) { return; }
+  // Refresh from network in background (updates cache silently)
   (async function() {
     const origOrdForData = currentTxn._orig_ord_id || orderRefToOrdUuid[currentTxn.order_ref];
     const dataId = id;
