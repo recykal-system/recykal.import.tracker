@@ -1059,12 +1059,13 @@ async function loadTracking(containerNo) {
       return;
     }
     const d = res.tracking || {};
-    // v2 fields first, fall back to v1 field names
-    const events = d.milestones || d.containerMovements || d.events || [];
-    const status = d.status || d.containerStatus || d.shipmentStatus || '—';
-    const eta = d.estimatedArrival || d.eta || d.estimatedTimeOfArrival || '—';
-    const vessel = d.vesselName || d.vessel || d.currentVessel || currentTxn.vessel || '—';
-    const voyage = d.voyageNumber || d.voyage || d.voyageNo || '';
+    // Shipsgo v2 field names
+    const events = d.milestones || d.movements || d.containerMovements || d.events || [];
+    const status = d.status || d.shipment_status || d.containerStatus || '—';
+    const eta = d.estimated_arrival || d.eta_date || d.estimatedArrival || d.eta || '—';
+    const vesselRaw = d.vessel_name || d.current_vessel || d.vesselName || d.vessel || '';
+    const voyage = d.voyage_number || d.voyageNumber || d.voyage || '';
+    const vessel = vesselRaw || currentTxn.vessel || '—';
     el.innerHTML =
       '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">' +
       '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Status</div><strong style="color:#166534">'+esc(status)+'</strong></div>' +
@@ -1074,9 +1075,9 @@ async function loadTracking(containerNo) {
       (events.length ?
         '<div style="font-size:11px;max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px">' +
         events.slice().reverse().map(function(ev, i) {
-          const date = ev.actualTime || ev.estimatedTime || ev.eventDate || ev.date || '';
-          const loc  = ev.location || ev.portName || ev.place || ev.port || '';
-          const desc = ev.milestone || ev.description || ev.eventType || ev.status || '';
+          const date = ev.date || ev.actual_date || ev.estimated_date || ev.actualTime || ev.eventDate || '';
+          const loc  = ev.location || ev.port || ev.portName || ev.place || '';
+          const desc = ev.move || ev.milestone || ev.description || ev.eventType || ev.status || '';
           return '<div style="padding:6px 10px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;background:'+(i===0?'#f0fdf4':'#fff')+'">' +
             '<div style="color:#94a3b8;white-space:nowrap;min-width:110px">'+esc(date?new Date(date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—')+'</div>' +
             '<div><div style="font-weight:600;color:#1e293b">'+esc(desc)+'</div><div style="color:#64748b">'+esc(loc)+'</div></div>' +
@@ -1084,7 +1085,8 @@ async function loadTracking(containerNo) {
         }).join('') +
         '</div>'
         : '<div style="color:#94a3b8;font-size:12px">No movement events returned yet.</div>') +
-      '<div style="font-size:10px;color:#94a3b8;margin-top:6px">Data via Shipsgo · may lag a few hours</div>';
+      '<div style="font-size:10px;color:#94a3b8;margin-top:6px">Data via Shipsgo · may lag a few hours</div>' +
+      ((!status||status==='—')&&(!eta||eta==='—')&&!events.length?'<details style="margin-top:8px"><summary style="font-size:10px;color:#94a3b8;cursor:pointer">Raw API response (debug)</summary><pre style="font-size:9px;color:#475569;overflow:auto;max-height:120px;background:#f8fafc;padding:6px;border-radius:4px">'+esc(JSON.stringify(d,null,2))+'</pre></details>':'');
   } catch(e) {
     el.innerHTML = '<div style="color:#ef4444;font-size:12px">Error: '+esc(e.message)+'</div>';
   }
