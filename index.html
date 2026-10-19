@@ -803,14 +803,13 @@ async function openTxn(id) {
     saveTxnCache(id);
     // Patch docs count into allTransactions and re-render table row
     const approved = freshDocs.filter(function(d){ return d.status==='Approved'; }).length;
-    const txnRow = allTransactions.find(function(x){ return x.id===id; });
-    if (txnRow) {
-      txnRow.docs_total = freshDocs.length;
-      txnRow.docs_approved = approved;
-      // Update docs cell directly by id
-      const docsCell = document.getElementById('docs-'+id);
-      if (docsCell) docsCell.textContent = approved+'/'+freshDocs.length+' docs';
-    }
+    [allTransactions, currentFiltered].forEach(function(arr) {
+      if (!arr) return;
+      const row = arr.find(function(x){ return x.id===id; });
+      if (row) { row.docs_total = freshDocs.length; row.docs_approved = approved; }
+    });
+    const docsCell = document.getElementById('docs-'+id);
+    if (docsCell) docsCell.textContent = approved+'/'+freshDocs.length+' docs';
     // Re-render only if this transaction is still open
     if (currentTxn && currentTxn.id === id) renderPanelTab(currentPanelTab);
   })();
@@ -1132,7 +1131,8 @@ async function loadTracking(containerNo) {
       el.innerHTML = '<div style="color:#ef4444;font-size:12px">'+esc(res.error)+'</div>';
       return;
     }
-    const d = res.tracking || {};
+    // Detail endpoint returns {message:'SUCCESS', shipment:{...}} — unwrap
+    const d = (res.tracking && res.tracking.shipment) ? res.tracking.shipment : (res.tracking || {});
     // Keep home-page live tracking map fresh
     const _cn = containerNo.toUpperCase().replace(/\s/g,'');
     if (_cn) liveTracking[_cn] = d;
@@ -1543,11 +1543,15 @@ async function saveDocAction(docName, action, idx) {
       doc.status = newStatus;
       await api('updateImportDocs', {txn_id: currentTxn.id, docs: JSON.stringify(cache.docs), by: currentUser});
       const txnIdx = allTransactions.findIndex(t=>t.id===currentTxn.id);
-      if (txnIdx>=0) {
-        allTransactions[txnIdx].docs_approved = cache.docs.filter(d=>d.status==='Approved').length;
-        const _dc = document.getElementById('docs-'+currentTxn.id);
-        if (_dc) _dc.textContent = allTransactions[txnIdx].docs_approved+'/'+allTransactions[txnIdx].docs_total+' docs';
-      }
+      const _approved = cache.docs.filter(d=>d.status==='Approved').length;
+      [allTransactions, currentFiltered].forEach(function(arr) {
+        if (!arr) return;
+        const row = arr.find(function(x){ return x.id===currentTxn.id; });
+        if (row) row.docs_approved = _approved;
+      });
+      const _dc = document.getElementById('docs-'+currentTxn.id);
+      const _tot = allTransactions.find(function(x){ return x.id===currentTxn.id; });
+      if (_dc && _tot) _dc.textContent = _approved+'/'+(_tot.docs_total||0)+' docs';
     }
   }
   renderPanelTab('documents');
