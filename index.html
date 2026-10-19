@@ -836,22 +836,24 @@ function renderOverview(t, cache) {
       '<thead><tr style="background:#f1f5f9">' +
       '<th style="text-align:left;padding:5px 6px;font-weight:600;position:static">Material</th>' +
       '<th style="text-align:right;padding:5px 6px;font-weight:600;position:static">Qty</th>' +
-      '<th style="text-align:right;padding:5px 6px;font-weight:600;position:static">Sup. Price</th>' +
-      '<th style="text-align:right;padding:5px 6px;font-weight:600;position:static">Buy. Price</th>' +
-      '<th style="text-align:left;padding:5px 6px;font-weight:600;position:static">Cur</th>' +
-      '<th style="text-align:right;padding:5px 6px;font-weight:600;position:static">Margin/MT</th>' +
+      '<th style="text-align:right;padding:5px 6px;font-weight:600;position:static">Sup. Price ('+esc(t.buy_currency||'USD')+')</th>' +
+      '<th style="text-align:right;padding:5px 6px;font-weight:600;position:static">Buy. Price ('+esc(t.sell_currency||t.buy_currency||'USD')+')</th>' +
       '<th style="padding:5px 4px;position:static"></th>' +
       '</tr></thead><tbody>' +
       lineItems.map(function(li) {
         const sp = parseFloat(li.price||0), bp = parseFloat(li.buyer_price||0), q = parseFloat(li.qty||0);
-        const margin = bp - sp;
+        const convRate = parseFloat(t.conv_rate||0);
+        const buyCur = t.buy_currency||'USD', sellCur = t.sell_currency||buyCur;
+        const sameCur = buyCur === sellCur;
+        // Convert supplier price to sell currency for margin if conv_rate provided and currencies differ
+        const spInSellCur = (!sameCur && convRate) ? sp * convRate : sp;
+        const canMargin = bp > 0 && (sameCur || convRate > 0);
+        const margin = canMargin ? bp - spInSellCur : null;
         return '<tr style="border-bottom:1px solid #f1f5f9">' +
           '<td style="padding:5px 6px"><span class="mat-chip">'+esc(li.material||'—')+'</span><div style="font-size:10px;color:#94a3b8">'+esc(li.hsn||'')+'</div></td>' +
           '<td style="padding:5px 6px;text-align:right">'+q.toLocaleString()+' '+(li.unit||'MT')+'</td>' +
           '<td style="padding:5px 6px;text-align:right">'+sp.toLocaleString()+'</td>' +
           '<td style="padding:5px 6px;text-align:right">'+(bp?bp.toLocaleString():'<span style="color:#94a3b8">—</span>')+'</td>' +
-          '<td style="padding:5px 6px;color:#64748b;font-size:11px">'+esc(li.currency||'USD')+'</td>' +
-          '<td style="padding:5px 6px;text-align:right;font-weight:600;color:'+(margin>=0?'#166534':'#991b1b')+'">'+(bp?(margin>=0?'+':'')+margin.toFixed(0):'<span style="color:#94a3b8">—</span>')+'</td>' +
           '<td style="padding:5px 4px;display:flex;gap:4px">' +
           '<button onclick="editLineItemBuyerPrice(\''+esc(li.id)+'\',\''+esc(li.material)+'\',\''+bp+'\')" style="background:none;border:1px solid #cbd5e1;border-radius:3px;color:#475569;cursor:pointer;font-size:10px;padding:1px 5px" title="Set buyer price">✎</button>' +
           '<button onclick="deleteLineItem(\''+esc(li.id)+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px" title="Remove">×</button>' +
@@ -862,14 +864,12 @@ function renderOverview(t, cache) {
         const totSup = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.price||0),0);
         const totBuy = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.buyer_price||0),0);
         const totQty = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
-        const totMargin = totBuy - totSup;
+        const buyCur = t.buy_currency||'USD', sellCur = t.sell_currency||buyCur;
         return '<tr style="border-top:2px solid #1e3a5f;font-weight:700;background:#f8fafc">' +
           '<td style="padding:6px">Total ('+totQty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td>' +
           '<td></td>' +
-          '<td style="padding:6px;text-align:right">'+esc(lineItems[0]&&lineItems[0].currency||t.buy_currency||'USD')+' '+totSup.toLocaleString(undefined,{maximumFractionDigits:0})+'</td>' +
-          '<td style="padding:6px;text-align:right">'+(totBuy?esc(lineItems[0]&&lineItems[0].currency||t.buy_currency||'USD')+' '+totBuy.toLocaleString(undefined,{maximumFractionDigits:0}):'—')+'</td>' +
-          '<td></td>' +
-          '<td style="padding:6px;text-align:right;color:'+(totMargin>=0?'#166534':'#991b1b')+'">'+(totBuy?(totMargin>=0?'+':'')+totMargin.toFixed(0):'—')+'</td>' +
+          '<td style="padding:6px;text-align:right">'+buyCur+' '+totSup.toLocaleString(undefined,{maximumFractionDigits:0})+'</td>' +
+          '<td style="padding:6px;text-align:right">'+(totBuy?sellCur+' '+totBuy.toLocaleString(undefined,{maximumFractionDigits:0}):'—')+'</td>' +
           '<td></td></tr>';
       })() +
       '</tbody></table>'
@@ -879,7 +879,7 @@ function renderOverview(t, cache) {
     '<div class="panel-section"><h3>Buy Side</h3>' +
     '<div class="info-row"><span><strong>Supplier:</strong> '+esc(t.supplier||'—')+'</span><span><strong>Country:</strong> '+esc(t.supplier_country||'—')+'</span></div>' +
     (t.buy_direct==='no'?'<div class="info-row"><span><strong>Via Intermediary:</strong> '+esc(t.intermediary||'—')+'</span><span><strong>We Pay Intermediary:</strong> '+esc(t.buy_currency||'USD')+' '+esc(t.intermediary_price||'—')+'/MT</span></div>':'')+
-    '<div class="info-row"><span><strong>Supplier Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+(lineItems.length>1?' <span style="font-size:10px;color:#64748b;font-weight:400">(wtd. avg)</span>':'')+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
+    '<div class="info-row"><span><strong>Supplier Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+parseFloat(t.buy_price||0).toFixed(2)+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
     '</div>' +
     '<div class="panel-section"><h3>Sell Side</h3>' +
     '<div class="info-row"><span><strong>Buyer:</strong> '+esc(t.buyer||'—')+'</span><span><strong>Country:</strong> '+esc(t.buyer_country||'—')+'</span></div>' +
@@ -891,15 +891,21 @@ function renderOverview(t, cache) {
       const totSup = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.price||0),0);
       const totBuy = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.buyer_price||0),0);
       const totQty = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
-      const cur = lineItems[0] && lineItems[0].currency || t.buy_currency || 'USD';
+      const buyCur = t.buy_currency||'USD', sellCur = t.sell_currency||buyCur;
+      const convRate = parseFloat(t.conv_rate||0);
+      const sameCur = buyCur === sellCur;
       const hasBuy = lineItems.some(function(li){ return parseFloat(li.buyer_price||0) > 0; });
-      const gross = totBuy - totSup;
+      // Convert supplier total to sell currency for net margin calc
+      const totSupInSellCur = (!sameCur && convRate) ? totSup * convRate : totSup;
+      const gross = totBuy - totSupInSellCur;
       const net = gross - totalCosts * totQty;
-      return (hasBuy ? '<tr><td style="padding:3px 0">Total Buyer Value</td><td style="text-align:right;font-weight:700">'+cur+' '+totBuy.toFixed(0)+'</td></tr>' : '') +
-        '<tr><td style="color:#64748b;padding:3px 0">Total Supplier Value</td><td style="text-align:right;font-weight:700;color:#1e3a5f">'+cur+' '+totSup.toFixed(0)+'</td></tr>' +
-        lineItems.map(function(li){ return '<tr><td style="color:#94a3b8;padding:2px 0 2px 12px;font-size:11px">'+esc(li.material||'')+'</td><td style="text-align:right;color:#64748b;font-size:11px">'+parseFloat(li.qty||0).toFixed(3).replace(/\.?0+$/,'')+' MT × '+parseFloat(li.price||0).toLocaleString()+' = '+cur+' '+(parseFloat(li.qty||0)*parseFloat(li.price||0)).toFixed(0)+'</td></tr>'; }).join('') +
-        (totalCosts?'<tr><td style="color:#64748b;padding:3px 0">− Total Costs</td><td style="text-align:right;color:#ef4444">'+(totalCosts*totQty).toFixed(0)+'</td></tr>':'') +
-        (hasBuy ? '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin ('+totQty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(net>=0?'#166534':'#991b1b')+'">'+net.toFixed(0)+'</td></tr>' : '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700;color:#94a3b8" colspan="2">Add buyer prices to see margin</td></tr>');
+      const canMargin = hasBuy && (sameCur || convRate > 0);
+      return (hasBuy ? '<tr><td style="padding:3px 0">Total Buyer Value</td><td style="text-align:right;font-weight:700">'+sellCur+' '+totBuy.toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>' : '') +
+        '<tr><td style="color:#64748b;padding:3px 0">Total Supplier Value</td><td style="text-align:right;font-weight:700;color:#1e3a5f">'+buyCur+' '+totSup.toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>' +
+        lineItems.map(function(li){ return '<tr><td style="color:#94a3b8;padding:2px 0 2px 12px;font-size:11px">'+esc(li.material||'')+'</td><td style="text-align:right;color:#64748b;font-size:11px">'+parseFloat(li.qty||0).toFixed(3).replace(/\.?0+$/,'')+' MT × '+parseFloat(li.price||0).toLocaleString()+' = '+buyCur+' '+(parseFloat(li.qty||0)*parseFloat(li.price||0)).toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>'; }).join('') +
+        (!sameCur && !convRate ? '<tr><td colspan="2" style="padding:4px 0;font-size:11px;color:#f59e0b">⚠ Set Conv. Rate (₹ per 1 '+buyCur+') to calculate net margin across currencies</td></tr>' : '') +
+        (totalCosts && canMargin ?'<tr><td style="color:#64748b;padding:3px 0">− Total Costs</td><td style="text-align:right;color:#ef4444">'+sellCur+' '+(totalCosts*totQty).toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>':'') +
+        (canMargin ? '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin ('+totQty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(net>=0?'#166534':'#991b1b')+'">'+sellCur+' '+net.toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>' : (!hasBuy ? '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700;color:#94a3b8" colspan="2">Add buyer prices to see margin</td></tr>' : ''));
     })() :
       (buyPrice>0?'<tr><td style="color:#64748b;padding:3px 0">Supplier Price / MT</td><td style="text-align:right;font-weight:700;color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+'</td></tr>':'') +
       (intPrice?'<tr><td style="color:#64748b;padding:3px 0">− Intermediary / MT</td><td style="text-align:right;color:#ef4444">'+intPrice.toFixed(2)+'</td></tr>':'') +
