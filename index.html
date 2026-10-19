@@ -901,6 +901,15 @@ function renderOverview(t, cache) {
     ) +
     '</table>' +
     '</div>' +
+    '<div class="panel-section" id="tracking-section">' +
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+    '<h3 style="margin:0">Container Tracking</h3>' +
+    '<div style="display:flex;gap:6px">' +
+    (t.container?'<a href="https://www.track-trace.com/container/'+esc(t.container)+'" target="_blank" class="btn-sm" style="text-decoration:none">Open on Track-Trace ↗</a>':'') +
+    (t.container?'<button class="btn-sm primary" onclick="loadTracking(\''+esc(t.container)+'\')">Refresh</button>':'') +
+    '</div></div>' +
+    '<div id="tracking-body">'+(t.container?'<div style="color:#94a3b8;font-size:12px">Click Refresh to load live status.</div>':'<div style="color:#94a3b8;font-size:12px">No container number on this transaction.</div>')+'</div>' +
+    '</div>' +
     '<div class="panel-section">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="margin:0">Drive Links</h3><button class="btn-sm" onclick="openAddDealLink()">+ Add Link</button></div>' +
     '<div id="deal-links-list" style="margin-bottom:6px"></div>' +
@@ -968,6 +977,47 @@ async function saveLineItem() {
     renderPanelTab('overview');
     showToast('Line item saved');
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
+}
+
+async function loadTracking(containerNo) {
+  const el = document.getElementById('tracking-body');
+  if (!el) return;
+  el.innerHTML = '<div style="color:#94a3b8;font-size:12px"><span class="spinner"></span> Loading live tracking…</div>';
+  try {
+    const res = await api('getContainerTracking', { container: containerNo });
+    if (res.error) {
+      el.innerHTML = '<div style="color:#ef4444;font-size:12px">'+esc(res.error)+'</div>';
+      return;
+    }
+    const d = res.tracking || {};
+    const events = d.containerMovements || d.events || [];
+    const status = d.status || d.containerStatus || '—';
+    const eta = d.eta || d.estimatedTimeOfArrival || '—';
+    const vessel = d.vessel || d.vesselName || currentTxn.vessel || '—';
+    const voyage = d.voyage || d.voyageNo || '';
+    el.innerHTML =
+      '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">' +
+      '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Status</div><strong style="color:#166534">'+esc(status)+'</strong></div>' +
+      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">ETA</div><strong>'+esc(eta)+'</strong></div>' +
+      '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Vessel</div><strong>'+esc(vessel+(voyage?' / '+voyage:''))+'</strong></div>' +
+      '</div>' +
+      (events.length ?
+        '<div style="font-size:11px;max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px">' +
+        events.slice().reverse().map(function(ev, i) {
+          const date = ev.eventDate || ev.date || ev.actualTime || '';
+          const loc  = ev.location || ev.portName || ev.place || '';
+          const desc = ev.description || ev.eventType || ev.status || '';
+          return '<div style="padding:6px 10px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;background:'+(i===0?'#f0fdf4':'#fff')+'">' +
+            '<div style="color:#94a3b8;white-space:nowrap;min-width:110px">'+esc(date?new Date(date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—')+'</div>' +
+            '<div><div style="font-weight:600;color:#1e293b">'+esc(desc)+'</div><div style="color:#64748b">'+esc(loc)+'</div></div>' +
+            '</div>';
+        }).join('') +
+        '</div>'
+        : '<div style="color:#94a3b8;font-size:12px">No movement events returned yet.</div>') +
+      '<div style="font-size:10px;color:#94a3b8;margin-top:6px">Data via Shipsgo · may lag a few hours</div>';
+  } catch(e) {
+    el.innerHTML = '<div style="color:#ef4444;font-size:12px">Error: '+esc(e.message)+'</div>';
+  }
 }
 
 async function deleteLineItem(lid) {
