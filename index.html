@@ -686,7 +686,7 @@ function renderTable(txns) {
       '<td style="font-size:11px">'+etaCell(t)+'</td>' +
       '<td style="font-size:11px" id="live-'+t.id+'">'+liveTrackingCell(t)+'</td>' +
       '<td style="font-size:11px">'+esc(t.assigned_to||'—')+'</td>' +
-      '<td style="font-size:11px;color:#64748b">'+docsHtml+'</td>' +
+      '<td style="font-size:11px;color:#64748b" id="docs-'+t.id+'">'+docsHtml+'</td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.updated_at)+'</td></tr>';
   }).join('');
 }
@@ -807,13 +807,9 @@ async function openTxn(id) {
     if (txnRow) {
       txnRow.docs_total = freshDocs.length;
       txnRow.docs_approved = approved;
-      // Update just the docs cell directly using the live-{id} sibling
-      const liveCell = document.getElementById('live-'+id);
-      if (liveCell && liveCell.parentElement) {
-        const cells = liveCell.parentElement.querySelectorAll('td');
-        // docs column = 2nd from last (before Updated)
-        if (cells.length >= 2) cells[cells.length - 2].textContent = approved+'/'+freshDocs.length+' docs';
-      }
+      // Update docs cell directly by id
+      const docsCell = document.getElementById('docs-'+id);
+      if (docsCell) docsCell.textContent = approved+'/'+freshDocs.length+' docs';
     }
     // Re-render only if this transaction is still open
     if (currentTxn && currentTxn.id === id) renderPanelTab(currentPanelTab);
@@ -1137,11 +1133,16 @@ async function loadTracking(containerNo) {
       return;
     }
     const d = res.tracking || {};
-    // Shipsgo v2 field names
-    const events = d.milestones || d.movements || d.containerMovements || d.events || [];
-    const status = d.status || d.shipment_status || d.containerStatus || '—';
-    const eta = d.estimated_arrival || d.eta_date || d.estimatedArrival || d.eta || '—';
-    const vesselRaw = d.vessel_name || d.current_vessel || d.vesselName || d.vessel || '';
+    // Keep home-page live tracking map fresh
+    const _cn = containerNo.toUpperCase().replace(/\s/g,'');
+    if (_cn) liveTracking[_cn] = d;
+    function sv(v) { return v ? (typeof v === 'object' ? (v.name || v.code || v.title || '') : String(v)) : ''; }
+    // Shipsgo v2 list fields (confirmed from export): status, date_of_discharge, carrier
+    // Detail endpoint may use same or nested fields — try all known names
+    const events = d.milestones || d.movements || d.containerMovements || d.events || d.tracking_info || [];
+    const status = sv(d.status || d.shipment_status || d.containerStatus) || '—';
+    const eta = sv(d.date_of_discharge || d.estimated_arrival || d.eta_date || d.estimatedArrival || d.pod_eta || d.eta) || '—';
+    const vesselRaw = sv(d.vessel_name || d.current_vessel || d.vesselName || d.vessel);
     const voyage = d.voyage_number || d.voyageNumber || d.voyage || '';
     const vessel = vesselRaw || currentTxn.vessel || '—';
     el.innerHTML =
@@ -1164,7 +1165,7 @@ async function loadTracking(containerNo) {
         '</div>'
         : '<div style="color:#94a3b8;font-size:12px">No movement events returned yet.</div>') +
       '<div style="font-size:10px;color:#94a3b8;margin-top:6px">Data via Shipsgo · may lag a few hours</div>' +
-      ((!status||status==='—')&&(!eta||eta==='—')&&!events.length?'<details style="margin-top:8px"><summary style="font-size:10px;color:#94a3b8;cursor:pointer">Raw API response (debug)</summary><pre style="font-size:9px;color:#475569;overflow:auto;max-height:120px;background:#f8fafc;padding:6px;border-radius:4px">'+esc(JSON.stringify(d,null,2))+'</pre></details>':'');
+      '<details style="margin-top:8px"><summary style="font-size:10px;color:#94a3b8;cursor:pointer">Raw API response (debug)</summary><pre style="font-size:9px;color:#475569;overflow:auto;max-height:200px;background:#f8fafc;padding:6px;border-radius:4px">'+esc(JSON.stringify(d,null,2))+'</pre></details>';
   } catch(e) {
     el.innerHTML = '<div style="color:#ef4444;font-size:12px">Error: '+esc(e.message)+'</div>';
   }
@@ -1544,6 +1545,8 @@ async function saveDocAction(docName, action, idx) {
       const txnIdx = allTransactions.findIndex(t=>t.id===currentTxn.id);
       if (txnIdx>=0) {
         allTransactions[txnIdx].docs_approved = cache.docs.filter(d=>d.status==='Approved').length;
+        const _dc = document.getElementById('docs-'+currentTxn.id);
+        if (_dc) _dc.textContent = allTransactions[txnIdx].docs_approved+'/'+allTransactions[txnIdx].docs_total+' docs';
       }
     }
   }
@@ -1589,7 +1592,12 @@ async function saveDocs() {
   if (res.success) {
     if (txnCache[currentTxn.id]) txnCache[currentTxn.id].docs = docs;
     const idx = allTransactions.findIndex(t=>t.id===currentTxn.id);
-    if (idx>=0) { allTransactions[idx].docs_total = docs.length; allTransactions[idx].docs_approved = docs.filter(d=>d.status==='Approved').length; }
+    if (idx>=0) {
+      allTransactions[idx].docs_total = docs.length;
+      allTransactions[idx].docs_approved = docs.filter(d=>d.status==='Approved').length;
+      const _dc = document.getElementById('docs-'+currentTxn.id);
+      if (_dc) _dc.textContent = allTransactions[idx].docs_approved+'/'+docs.length+' docs';
+    }
     renderPanelTab('documents');
     showToast('Documents saved');
   } else { showToast('Error: '+(res.error||'unknown'), 'error'); }
