@@ -219,13 +219,13 @@ td { padding: 9px 12px; vertical-align: middle; }
 <div class="table-wrap" id="table-wrap">
   <table>
     <thead><tr>
-      <th></th><th>Txn Ref</th><th>Order Ref</th><th>Supplier</th><th>Buyer</th>
-      <th>Material</th><th>Qty</th><th>Stage</th><th>ETD</th><th>ETA / Container</th>
-      <th style="min-width:130px">Live Status</th>
+      <th></th><th>Txn Ref</th><th>Supplier</th><th>Buyer</th>
+      <th>Material</th><th>Qty</th><th>Stage</th><th>ETA / Container</th>
+      <th style="min-width:140px">Live Status</th>
       <th>Assigned To</th><th>Docs</th><th>Updated</th>
     </tr></thead>
     <tbody id="txn-body">
-      <tr class="loading-row"><td colspan="14"><span class="spinner"></span> Loading…</td></tr>
+      <tr class="loading-row"><td colspan="12"><span class="spinner"></span> Loading…</td></tr>
     </tbody>
   </table>
 </div>
@@ -542,7 +542,7 @@ async function fetchTransactions() {
 async function loadTransactions() {
   const cached = localStorage.getItem('imp_transactions');
   if (cached) { try { allTransactions = JSON.parse(cached); applyFilters(); } catch(e){} }
-  else { document.getElementById('txn-body').innerHTML = '<tr class="loading-row"><td colspan="14"><span class="spinner"></span> Loading…</td></tr>'; }
+  else { document.getElementById('txn-body').innerHTML = '<tr class="loading-row"><td colspan="12"><span class="spinner"></span> Loading…</td></tr>'; }
   try {
     const r = await fetchTransactions();
     if (r.error) throw new Error(r.error);
@@ -551,7 +551,7 @@ async function loadTransactions() {
     applyFilters();
     refreshAllTracking(); // auto-load live tracking after transactions
   } catch(e) {
-    if (!cached) document.getElementById('txn-body').innerHTML = '<tr class="empty-row"><td colspan="14" style="color:#ef4444">Could not connect: ' + e.message + '</td></tr>';
+    if (!cached) document.getElementById('txn-body').innerHTML = '<tr class="empty-row"><td colspan="12" style="color:#ef4444">Could not connect: ' + e.message + '</td></tr>';
   }
 }
 
@@ -613,18 +613,21 @@ function liveTrackingCell(t) {
   if (!t.container) return '<span style="color:#cbd5e1">—</span>';
   const cn = t.container.toUpperCase().replace(/\s/g,'');
   const d = liveTracking[cn];
-  if (trackingLoading && !d) return '<span style="color:#94a3b8"><span class="spinner"></span></span>';
-  if (!d) return '<span style="color:#94a3b8;font-size:10px">click ⟳</span>';
+  if (trackingLoading) return '<span style="color:#94a3b8"><span class="spinner"></span></span>';
+  if (!d) return '<span style="color:#94a3b8;font-size:10px">Not in Shipsgo</span>';
   const status = d.status || d.shipment_status || '';
-  const eta = d.estimated_arrival || d.eta_date || d.eta || '';
-  const vessel = d.vessel_name || d.current_vessel || '';
-  const statusColor = status.includes('ARRIVED')||status.includes('DISCHARG') ? '#166534'
-    : status.includes('EN_ROUTE')||status.includes('TRANSIT')||status.includes('SHIPPING') ? '#1d4ed8'
-    : status.includes('DELAY') ? '#ef4444' : '#475569';
-  return '<div style="line-height:1.4">' +
-    (status ? '<span style="color:'+statusColor+';font-weight:600;font-size:11px">'+esc(status.replace(/_/g,' '))+'</span>' : '') +
+  const eta = d.estimated_arrival || d.eta_date || d.destination_eta || d.pod_date || d.eta || '';
+  const vessel = d.vessel_name || d.current_vessel || d.vessel || '';
+  const carrier = d.carrier || d.shipping_line || '';
+  const sl = status.toLowerCase();
+  const statusColor = (sl.includes('arriv')||sl.includes('discharg')||sl.includes('deliver')) ? '#166534'
+    : (sl.includes('sail')||sl.includes('transit')||sl.includes('route')||sl.includes('ship')) ? '#1d4ed8'
+    : sl.includes('delay') ? '#ef4444'
+    : sl.includes('load') ? '#854d0e' : '#475569';
+  return '<div style="line-height:1.5">' +
+    (status ? '<span style="color:'+statusColor+';font-weight:700;font-size:11px">'+esc(status)+'</span>' : '') +
     (eta ? '<div style="color:#64748b;font-size:10px">ETA '+fmtDate(eta)+'</div>' : '') +
-    (vessel ? '<div style="color:#94a3b8;font-size:10px">'+esc(vessel)+'</div>' : '') +
+    ((vessel||carrier) ? '<div style="color:#94a3b8;font-size:10px">'+esc(vessel||(carrier?'via '+carrier:''))+'</div>' : '') +
     '</div>';
 }
 
@@ -634,7 +637,7 @@ async function refreshAllTracking() {
   trackingLoading = true;
   renderTable(currentFiltered || allTransactions);
   try {
-    const res = await safe(api('getAllContainerTracking', {}));
+    const res = await api('getAllContainerTracking', {}).catch(function(){ return {}; });
     if (res && res.shipments) {
       liveTracking = {};
       res.shipments.forEach(function(s) {
@@ -652,7 +655,7 @@ let currentFiltered = null;
 
 function renderTable(txns) {
   const tbody = document.getElementById('txn-body');
-  if (!txns.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="14">No transactions yet. Click "+ New Transaction" to start.</td></tr>'; return; }
+  if (!txns.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="12">No transactions yet. Click "+ New Transaction" to start.</td></tr>'; return; }
   tbody.innerHTML = txns.map(function(t) {
     const rag = t.rag || 'grey';
     const docsTotal = parseInt(t.docs_total||0);
@@ -661,14 +664,12 @@ function renderTable(txns) {
     const supplierDisplay = t.buy_direct==='no' ? (t.supplier||'—') + ' <span style="font-size:10px;color:#94a3b8">(via '+esc(t.intermediary||'3P')+')</span>' : esc(t.supplier||'—');
     return '<tr onclick="openTxn(\''+t.id+'\')">' +
       '<td><span class="rag rag-'+rag+'" title="'+rag.charAt(0).toUpperCase()+rag.slice(1)+'"></span></td>' +
-      '<td><strong>'+esc(t.txn_ref||'—')+'</strong></td>' +
-      '<td style="font-size:11px;color:#64748b">'+esc(t.order_ref||'—')+'</td>' +
+      '<td><strong>'+esc(t.txn_ref||'—')+'</strong><div style="font-size:10px;color:#94a3b8">'+esc(t.order_ref||'')+'</div></td>' +
       '<td>'+supplierDisplay+'</td>' +
       '<td>'+esc(t.buyer||'—')+'</td>' +
       '<td>'+txnMaterials(t).map(function(m){return '<span class="mat-chip">'+esc(m)+'</span>';}).join('')+'</td>' +
       '<td style="font-size:11px">'+txnTotalQty(t)+'</td>' +
       '<td><span class="badge badge-'+(STAGE_CLASS[t.stage]||'confirmation')+'">'+esc(t.stage||'Confirmation')+'</span></td>' +
-      '<td style="font-size:11px;color:#64748b">'+fmtDate(t.etd)+'</td>' +
       '<td style="font-size:11px">'+etaCell(t)+'</td>' +
       '<td style="font-size:11px" id="live-'+t.id+'">'+liveTrackingCell(t)+'</td>' +
       '<td style="font-size:11px">'+esc(t.assigned_to||'—')+'</td>' +
@@ -787,6 +788,21 @@ async function openTxn(id) {
       lineItems: lr.items || []
     };
     saveTxnCache(id);
+    // Update docs count in home page table row
+    const approved = freshDocs.filter(function(d){ return d.status==='Approved'; }).length;
+    const txnRow = allTransactions.find(function(x){ return x.id===id; });
+    if (txnRow) {
+      txnRow.docs_total = freshDocs.length;
+      txnRow.docs_approved = approved;
+      const cell = document.querySelector('#txn-body tr td[id]'); // update docs cell in row
+      const row = document.querySelector('tr[onclick*="\''+id+'\'"]');
+      if (row) {
+        const cells = row.querySelectorAll('td');
+        // docs is 2nd from last visible column
+        const docsCell = cells[cells.length - 2];
+        if (docsCell) docsCell.textContent = approved+'/'+freshDocs.length+' docs';
+      }
+    }
     // Re-render only if this transaction is still open
     if (currentTxn && currentTxn.id === id) renderPanelTab(currentPanelTab);
   })();
