@@ -783,16 +783,31 @@ function renderPanelTab(tab) {
 
 // --- Overview ---
 function renderOverview(t, cache) {
-  const buyPrice = parseFloat(t.buy_price||0);
   const sellPrice = parseFloat(t.sell_price||0);
-  const qty = parseFloat(t.qty||0);
   const totalCosts = (cache.costs||[]).reduce((s,c)=>s+parseFloat(c.amount||0),0);
   const lineItems = cache.lineItems || [];
   const lineItemsTotal = lineItems.reduce((s,li)=>s+parseFloat(li.amount||0),0);
+  const intPrice = parseFloat(t.intermediary_price||0);
+
+  // For multi-commodity: derive buy price and qty from order's line_items
+  const ordLineItems = (function(){
+    const ord = t.order_ref ? ordersMap[t.order_ref] : null;
+    if (!ord || !ord.line_items) return [];
+    try { return typeof ord.line_items==='string' ? JSON.parse(ord.line_items) : ord.line_items; } catch(e) { return []; }
+  })();
+  let buyPrice, qty;
+  if (ordLineItems.length > 1) {
+    const totalSupVal = ordLineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.supplier_price||0),0);
+    qty = ordLineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
+    buyPrice = qty ? totalSupVal / qty : 0; // weighted avg supplier price
+  } else {
+    buyPrice = parseFloat(t.buy_price||0);
+    qty = parseFloat(t.qty||0);
+  }
+
   const grossMargin = sellPrice - buyPrice;
   const netMargin = grossMargin - totalCosts;
   const totalNetMargin = qty ? netMargin * qty : null;
-  const intPrice = parseFloat(t.intermediary_price||0);
 
   const ragColors = {green:'#22c55e',amber:'#f59e0b',red:'#ef4444'};
   const ragColor = ragColors[t.rag||'grey']||'#cbd5e1';
@@ -846,7 +861,7 @@ function renderOverview(t, cache) {
     '<div class="panel-section"><h3>Buy Side</h3>' +
     '<div class="info-row"><span><strong>Supplier:</strong> '+esc(t.supplier||'—')+'</span><span><strong>Country:</strong> '+esc(t.supplier_country||'—')+'</span></div>' +
     (t.buy_direct==='no'?'<div class="info-row"><span><strong>Via Intermediary:</strong> '+esc(t.intermediary||'—')+'</span><span><strong>We Pay Intermediary:</strong> '+esc(t.buy_currency||'USD')+' '+esc(t.intermediary_price||'—')+'/MT</span></div>':'')+
-    '<div class="info-row"><span><strong>Supplier Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
+    '<div class="info-row"><span><strong>Supplier Price / MT:</strong> <strong style="color:#1e3a5f">'+esc(t.buy_currency||'USD')+' '+buyPrice.toFixed(2)+(ordLineItems.length>1?' <span style="font-size:10px;color:#64748b;font-weight:400">(wtd. avg)</span>':'')+'</strong></span><span><strong>Payment Terms:</strong> '+esc(t.buy_payment_terms||'—')+'</span></div>' +
     '</div>' +
     '<div class="panel-section"><h3>Sell Side</h3>' +
     '<div class="info-row"><span><strong>Buyer:</strong> '+esc(t.buyer||'—')+'</span><span><strong>Country:</strong> '+esc(t.buyer_country||'—')+'</span></div>' +
@@ -859,7 +874,7 @@ function renderOverview(t, cache) {
     (intPrice?'<tr><td style="color:#64748b;padding:3px 0">− Intermediary / MT</td><td style="text-align:right;color:#ef4444">'+intPrice.toFixed(2)+'</td></tr>':'') +
     '<tr><td style="color:#64748b;padding:3px 0">− Total Costs / MT</td><td style="text-align:right;color:#ef4444">'+(totalCosts-intPrice > 0 ? (totalCosts-intPrice).toFixed(2) : '0.00')+'</td></tr>' +
     '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin / MT</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(netMargin>=0?'#166534':'#991b1b')+'">'+netMargin.toFixed(2)+'</td></tr>' +
-    (totalNetMargin!==null?'<tr><td style="color:#64748b;padding:3px 0">Total Net ('+esc(t.qty)+' '+esc(t.unit||'MT')+')</td><td style="text-align:right;font-weight:700;color:'+(totalNetMargin>=0?'#166534':'#991b1b')+'">'+totalNetMargin.toFixed(0)+'</td></tr>':'')+
+    (totalNetMargin!==null?'<tr><td style="color:#64748b;padding:3px 0">Total Net ('+qty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:700;color:'+(totalNetMargin>=0?'#166534':'#991b1b')+'">'+totalNetMargin.toFixed(0)+'</td></tr>':'')+
     '</table>' +
     '</div>' +
     '<div class="panel-section">' +
