@@ -1161,7 +1161,7 @@ async function loadTracking(containerNo) {
     el.innerHTML =
       '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px">' +
       '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Status</div><strong style="color:#166534">'+esc(status)+'</strong></div>' +
-      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">ETA</div><strong>'+esc(eta)+'</strong></div>' +
+      '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">ETA</div><strong>'+(eta&&eta!=='—'?esc(fmtDate(eta)):esc(eta))+'</strong></div>' +
       '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;font-size:12px"><div style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Vessel</div><strong>'+esc(vessel+(voyage?' / '+voyage:''))+'</strong></div>' +
       '</div>' +
       (events.length ?
