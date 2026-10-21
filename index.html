@@ -1154,7 +1154,7 @@ async function loadTracking(containerNo) {
     // Detail endpoint may use same or nested fields — try all known names
     const events = d.milestones || d.movements || d.containerMovements || d.events || d.tracking_info || [];
     const status = sv(d.status || d.shipment_status || d.containerStatus) || '—';
-    const eta = sv(d.date_of_discharge || d.estimated_arrival || d.eta_date || d.estimatedArrival || d.pod_eta || d.eta) || '—';
+    const eta = sv(d.date_of_discharge || (d.port_of_discharge && d.port_of_discharge.date_of_discharge) || d.estimated_arrival || d.eta_date || d.estimatedArrival || d.pod_eta || d.eta) || '—';
     const vesselRaw = sv(d.vessel_name || d.current_vessel || d.vesselName || d.vessel);
     const voyage = d.voyage_number || d.voyageNumber || d.voyage || '';
     const vessel = vesselRaw || currentTxn.vessel || '—';
