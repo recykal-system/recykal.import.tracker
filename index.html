@@ -420,7 +420,29 @@ function signOut() {
 }
 
 let _gisInited = false;
+function initGIS() {
+  if (_gisInited) return;
+  _gisInited = true;
+  google.accounts.id.initialize({
+    client_id: '990583974585-urcqsg4igf0m4r42h3srhr7qeodk6uk0.apps.googleusercontent.com',
+    callback: handleCredentialResponse,
+    auto_select: true  // silently refreshes token on wake/reload if user still has Google session
+  });
+  google.accounts.id.renderButton(document.querySelector('.g_id_signin'), { type: 'standard', size: 'large', theme: 'outline', text: 'sign_in_with', shape: 'rectangular', logo_alignment: 'left' });
+}
+
+function silentRefresh() {
+  initGIS();
+  google.accounts.id.prompt(function(notification) {
+    // If silent refresh fails (dismissed / no session), show sign-in page
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      document.getElementById('signin-page').style.display = 'flex';
+    }
+  });
+}
+
 window.onload = function() {
+  initGIS();
   const saved = localStorage.getItem('imp_token');
   if (saved) {
     try {
@@ -433,12 +455,8 @@ window.onload = function() {
       }
     } catch(e) {}
   }
-  document.getElementById('signin-page').style.display = 'flex';
-  if (!_gisInited) {
-    _gisInited = true;
-    google.accounts.id.initialize({ client_id: '990583974585-urcqsg4igf0m4r42h3srhr7qeodk6uk0.apps.googleusercontent.com', callback: handleCredentialResponse, auto_select: false });
-    google.accounts.id.renderButton(document.querySelector('.g_id_signin'), { type: 'standard', size: 'large', theme: 'outline', text: 'sign_in_with', shape: 'rectangular', logo_alignment: 'left' });
-  }
+  // Token missing or expired — try silent refresh before showing sign-in page
+  silentRefresh();
 };
 
 // --- API ---
@@ -448,7 +466,25 @@ async function api(action, data, _retry) {
   try {
     const res = await fetch(url, { redirect: 'follow' });
     const text = await res.text();
-    try { return JSON.parse(text); }
+    try {
+      const json = JSON.parse(text);
+      if (json && json.error === 'Unauthorized' && !_retry) {
+        // Token expired — try silent refresh then retry once
+        await new Promise(function(resolve) {
+          initGIS();
+          google.accounts.id.prompt(function(n) {
+            if (n.isNotDisplayed() || n.isSkippedMoment()) {
+              document.getElementById('signin-page').style.display = 'flex';
+            }
+            resolve();
+          });
+          setTimeout(resolve, 3000); // don't wait forever
+        });
+        if (currentToken) return api(action, data, 1);
+        return json;
+      }
+      return json;
+    }
     catch(e) {
       if ((_retry||0) < 2) { await new Promise(r=>setTimeout(r, 800*((_retry||0)+1))); return api(action, data, (_retry||0)+1); }
       console.error('API parse error:', text.slice(0,200));
