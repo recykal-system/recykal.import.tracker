@@ -1821,8 +1821,8 @@ function openEditPayment(pid) {
     '<div class="form-group" id="ep-conv-wrap-'+pid+'"'+(cur==='INR'?' style="display:none"':'')+'>'+
     '<label>Conversion Rate (₹ per 1 '+esc(cur)+')</label><input id="ep-conv-'+pid+'" type="number" step="0.01" value="'+esc(p.conversion_rate||'')+'" placeholder="optional" /></div>' +
     '<div class="form-group"><label>Party</label><input id="ep-party-'+pid+'" value="'+esc(p.party||'')+'" /></div>' +
-    '<div class="form-group"><label>Due Date</label><input id="ep-due-'+pid+'" type="date" value="'+esc(p.due_date||'')+'" /></div>' +
-    '<div class="form-group"><label>Paid Date</label><input id="ep-paid-'+pid+'" type="date" value="'+esc(p.paid_date||'')+'" /></div>' +
+    '<div class="form-group"><label>Due Date</label><input id="ep-due-'+pid+'" type="date" value="'+esc(p.due_date?toInputDate(p.due_date):'')+'" /></div>' +
+    '<div class="form-group"><label>Paid Date</label><input id="ep-paid-'+pid+'" type="date" value="'+esc(p.paid_date?toInputDate(p.paid_date):'')+'" /></div>' +
     '<div class="form-group"><label>Reference</label><input id="ep-ref-'+pid+'" value="'+esc(p.reference||'')+'" /></div>' +
     '<div class="form-group"><label>Notes</label><input id="ep-notes-'+pid+'" value="'+esc(p.notes||'')+'" /></div>' +
     '</div>' +
@@ -2200,6 +2200,14 @@ function switchTab(tab) {
 function esc(str) {
   if (str===null||str===undefined) return '';
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toInputDate(val) {
+  if (!val) return '';
+  try {
+    const d = new Date(val);
+    if (isNaN(d)) return String(val).slice(0,10);
+    return d.toISOString().slice(0,10);
+  } catch(e) { return String(val).slice(0,10); }
 }
 function fmtDate(val) {
   if (!val) return '—';
