@@ -1844,17 +1844,19 @@ function toggleEditConvRate(pid) {
 async function saveEditPayment(pid) {
   const cur = document.getElementById('ep-currency-'+pid).value;
   const convEl = document.getElementById('ep-conv-'+pid);
+  // Preserve existing values — never overwrite with blank if the user didn't touch the field
+  const existing = ((txnCache[currentTxn.id]||{}).payments||[]).find(function(x){return x.id===pid;}) || {};
   const payload = {
     id: pid,
     txn_id: currentTxn.id,
     type:     document.getElementById('ep-type-'+pid).value,
     amount:   document.getElementById('ep-amount-'+pid).value,
     currency: cur,
-    conversion_rate: (cur !== 'INR' && convEl && convEl.value) ? convEl.value : '',
-    party:    document.getElementById('ep-party-'+pid).value.trim(),
-    due_date: document.getElementById('ep-due-'+pid).value,
-    paid_date:document.getElementById('ep-paid-'+pid).value,
-    reference:document.getElementById('ep-ref-'+pid).value.trim(),
+    conversion_rate: (convEl && convEl.value) ? convEl.value : (existing.conversion_rate||''),
+    party:    document.getElementById('ep-party-'+pid).value.trim() || existing.party || '',
+    due_date: document.getElementById('ep-due-'+pid).value || existing.due_date || '',
+    paid_date:document.getElementById('ep-paid-'+pid).value || existing.paid_date || '',
+    reference:document.getElementById('ep-ref-'+pid).value.trim() || existing.reference || '',
     notes:    document.getElementById('ep-notes-'+pid).value.trim(),
     by: currentUser
   };
