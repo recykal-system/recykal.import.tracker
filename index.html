@@ -1998,8 +1998,8 @@ function openEditOverview() {
     '<div class="form-group"><label>BL #</label><input id="et-bl" value="'+esc(t.bl||'')+'" /></div>' +
     '<div class="form-group"><label>Loading Port</label><input id="et-port-loading" value="'+esc(t.port_loading||'')+'" /></div>' +
     '<div class="form-group"><label>Discharge Port</label><input id="et-port-discharge" value="'+esc(t.port_discharge||'')+'" /></div>' +
-    '<div class="form-group"><label>ETD</label><input id="et-etd" type="date" value="'+esc(t.etd?t.etd.slice(0,10):'')+'" /></div>' +
-    '<div class="form-group"><label>ETA</label><input id="et-eta" type="date" value="'+esc(t.eta?t.eta.slice(0,10):'')+'" /></div>' +
+    '<div class="form-group"><label>ETD</label><input id="et-etd" type="date" value="'+esc(toInputDate(t.etd))+'" /></div>' +
+    '<div class="form-group"><label>ETA</label><input id="et-eta" type="date" value="'+esc(toInputDate(t.eta))+'" /></div>' +
     '<div class="form-group full"><label>Notes</label><textarea id="et-notes">'+esc(t.notes||'')+'</textarea></div>' +
     '</div>' +
     '<div class="form-actions"><button class="btn-cancel" onclick="renderPanelTab(\'overview\')">Cancel</button>' +
@@ -2021,13 +2021,13 @@ async function saveEditOverview() {
     intermediary_price: (document.getElementById('et-int-price')||{}).value||'',
     buy_price:            document.getElementById('et-buy-price').value,
     buy_currency:         document.getElementById('et-buy-cur').value,
-    buy_conversion_rate:  (document.getElementById('et-buy-cur').value !== 'INR' && document.getElementById('et-buy-conv').value) ? document.getElementById('et-buy-conv').value : '',
+    buy_conversion_rate:  document.getElementById('et-buy-cur').value === 'INR' ? '' : (document.getElementById('et-buy-conv').value || currentTxn.buy_conversion_rate || ''),
     buy_payment_terms:    document.getElementById('et-buy-terms').value.trim(),
     buyer:                document.getElementById('et-buyer').value.trim(),
     buyer_country:        document.getElementById('et-buyer-country').value.trim(),
     sell_price:           document.getElementById('et-sell-price').value,
     sell_currency:        document.getElementById('et-sell-cur').value,
-    sell_conversion_rate: (document.getElementById('et-sell-cur').value !== 'INR' && document.getElementById('et-sell-conv').value) ? document.getElementById('et-sell-conv').value : '',
+    sell_conversion_rate: document.getElementById('et-sell-cur').value === 'INR' ? '' : (document.getElementById('et-sell-conv').value || currentTxn.sell_conversion_rate || ''),
     sell_payment_terms:   document.getElementById('et-sell-terms').value.trim(),
     material:           document.getElementById('et-material').value.trim(),
     qty:                document.getElementById('et-qty').value,
@@ -2038,8 +2038,8 @@ async function saveEditOverview() {
     bl:                 document.getElementById('et-bl').value.trim(),
     port_loading:       document.getElementById('et-port-loading').value.trim(),
     port_discharge:     document.getElementById('et-port-discharge').value.trim(),
-    etd:                document.getElementById('et-etd').value,
-    eta:                document.getElementById('et-eta').value,
+    etd:                document.getElementById('et-etd').value || currentTxn.etd || '',
+    eta:                document.getElementById('et-eta').value || currentTxn.eta || '',
     notes:              document.getElementById('et-notes').value.trim(),
     by: currentUser
   };
