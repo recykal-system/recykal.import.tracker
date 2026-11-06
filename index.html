@@ -983,7 +983,7 @@ function renderOverview(t, cache) {
       '</tr></thead><tbody>' +
       lineItems.map(function(li) {
         const sp = parseFloat(li.price||0), bp = parseFloat(li.buyer_price||0), q = parseFloat(li.qty||0);
-        const convRate = parseFloat(t.conv_rate||0);
+        const convRate = parseFloat(t.buy_conversion_rate||0);
         const buyCur = t.buy_currency||'USD', sellCur = t.sell_currency||buyCur;
         const sameCur = buyCur === sellCur;
         // Convert supplier price to sell currency for margin if conv_rate provided and currencies differ
@@ -1033,7 +1033,7 @@ function renderOverview(t, cache) {
       const totBuy = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.buyer_price||0),0);
       const totQty = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
       const buyCur = t.buy_currency||'USD', sellCur = t.sell_currency||buyCur;
-      const convRate = parseFloat(t.conv_rate||0);
+      const convRate = parseFloat(t.buy_conversion_rate||0);
       const sameCur = buyCur === sellCur;
       const hasBuy = lineItems.some(function(li){ return parseFloat(li.buyer_price||0) > 0; });
       // Convert supplier total to sell currency for net margin calc
