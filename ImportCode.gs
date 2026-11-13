@@ -39,7 +39,7 @@ function setupImportSheets() {
       'expected_date','received_date','notes','updated_at'
     ],
     ImportPayments: [
-      'id','txn_id','leg','type','amount','currency','party',
+      'id','txn_id','leg','type','amount','currency','conversion_rate','party',
       'due_date','paid_date','reference','notes','created_by','created_at'
     ],
     ImportCosts: [
@@ -71,15 +71,22 @@ function setupImportSheets() {
 // Adds missing columns to ImportTransactions without touching existing data.
 // Run once from Apps Script editor: addMissingColumns()
 function addMissingColumns() {
-  var sh = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName('ImportTransactions');
-  var existing = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
-  var toAdd = ['buy_conversion_rate', 'sell_conversion_rate'];
-  toAdd.forEach(function(col) {
-    if (existing.indexOf(col) === -1) {
-      var newCol = sh.getLastColumn() + 1;
-      sh.getRange(1, newCol).setValue(col)
-        .setBackground('#1e3a5f').setFontColor('#ffffff').setFontWeight('bold');
-    }
+  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  var fixes = {
+    ImportTransactions: ['buy_conversion_rate', 'sell_conversion_rate'],
+    ImportPayments: ['conversion_rate']
+  };
+  Object.keys(fixes).forEach(function(sheetName) {
+    var sh = ss.getSheetByName(sheetName);
+    if (!sh) return;
+    var existing = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+    fixes[sheetName].forEach(function(col) {
+      if (existing.indexOf(col) === -1) {
+        var newCol = sh.getLastColumn() + 1;
+        sh.getRange(1, newCol).setValue(col)
+          .setBackground('#1e3a5f').setFontColor('#ffffff').setFontWeight('bold');
+      }
+    });
   });
   return { success: true };
 }
