@@ -778,19 +778,20 @@ function renderTable(txns) {
       '<td colspan="12" style="padding:8px 10px;font-size:12px;font-weight:600;color:#64748b;user-select:none">' +
       '<span id="done-chevron" style="margin-right:6px">'+(collapsed?'▶':'▼')+'</span>' +
       'Completed & Cancelled ('+done.length+')</td></tr>';
-    html += '<tbody id="done-rows" style="display:'+(collapsed?'none':'table-row-group')+'">' +
-      done.map(txnRow).join('') + '</tbody>';
+    html += done.map(function(t){
+      return txnRow(t).replace('<tr onclick=', '<tr class="done-row" style="display:'+(collapsed?'none':'table-row')+';" onclick=');
+    }).join('');
   }
 
   tbody.innerHTML = html;
 }
 
 function toggleDoneSection() {
-  var rows = document.getElementById('done-rows');
   var chevron = document.getElementById('done-chevron');
-  if (!rows) return;
-  var collapsed = rows.style.display === 'none';
-  rows.style.display = collapsed ? 'table-row-group' : 'none';
+  if (!chevron) return;
+  var rows = document.querySelectorAll('#txn-body tr.done-row');
+  var collapsed = rows.length && rows[0].style.display === 'none';
+  rows.forEach(function(r){ r.style.display = collapsed ? 'table-row' : 'none'; });
   chevron.textContent = collapsed ? '▼' : '▶';
   localStorage.setItem('imp_done_collapsed', collapsed ? '0' : '1');
 }
