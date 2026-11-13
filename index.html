@@ -305,6 +305,7 @@ td { padding: 9px 12px; vertical-align: middle; }
           <optgroup label="Aluminium"><option>UBC</option><option>Tense</option><option>TT</option><option>Extrusion</option><option>Zorba</option><option>Wire</option><option>TRUMP</option></optgroup>
           <optgroup label="Lead"><option>Lead Scrap</option><option>Re-melted Lead</option><option>Lead Ingot</option><option>Dry Battery (Rains)</option></optgroup>
           <optgroup label="Ferrous"><option>Heavy Melting</option><option>Stainless Steel Scrap</option></optgroup>
+          <optgroup label="Zinc"><option>Zinc Ingot</option><option>Zinc Die Casting</option></optgroup>
           <optgroup label="Plastic"><option>HDPE</option><option>PET Flakes</option></optgroup>
         </select>
       </div>
@@ -737,7 +738,12 @@ let currentFiltered = null;
 function renderTable(txns) {
   const tbody = document.getElementById('txn-body');
   if (!txns.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="12">No transactions yet. Click "+ New Transaction" to start.</td></tr>'; return; }
-  tbody.innerHTML = txns.map(function(t) {
+
+  const DONE_STAGES = ['Completed','Cancelled'];
+  const active = txns.filter(function(t){ return DONE_STAGES.indexOf(t.stage) === -1; });
+  const done   = txns.filter(function(t){ return DONE_STAGES.indexOf(t.stage) !== -1; });
+
+  function txnRow(t) {
     const rag = t.rag || 'grey';
     const docsTotal = parseInt(t.docs_total||0);
     const docsApproved = parseInt(t.docs_approved||0);
@@ -756,7 +762,37 @@ function renderTable(txns) {
       '<td style="font-size:11px">'+esc(t.assigned_to||'—')+'</td>' +
       '<td style="font-size:11px;color:#64748b" id="docs-'+t.id+'">'+docsHtml+'</td>' +
       '<td style="font-size:11px;color:#64748b">'+fmtDate(t.updated_at)+'</td></tr>';
-  }).join('');
+  }
+
+  var html = '';
+  if (active.length) {
+    html += active.map(txnRow).join('');
+  } else {
+    html += '<tr class="empty-row"><td colspan="12" style="color:#94a3b8">No active transactions.</td></tr>';
+  }
+
+  if (done.length) {
+    var stored = localStorage.getItem('imp_done_collapsed');
+    var collapsed = stored === null ? true : stored === '1';
+    html += '<tr id="done-header-row" onclick="toggleDoneSection()" style="cursor:pointer;background:#f8fafc;border-top:2px solid #e2e8f0">' +
+      '<td colspan="12" style="padding:8px 10px;font-size:12px;font-weight:600;color:#64748b;user-select:none">' +
+      '<span id="done-chevron" style="margin-right:6px">'+(collapsed?'▶':'▼')+'</span>' +
+      'Completed & Cancelled ('+done.length+')</td></tr>';
+    html += '<tbody id="done-rows" style="display:'+(collapsed?'none':'table-row-group')+'">' +
+      done.map(txnRow).join('') + '</tbody>';
+  }
+
+  tbody.innerHTML = html;
+}
+
+function toggleDoneSection() {
+  var rows = document.getElementById('done-rows');
+  var chevron = document.getElementById('done-chevron');
+  if (!rows) return;
+  var collapsed = rows.style.display === 'none';
+  rows.style.display = collapsed ? 'table-row-group' : 'none';
+  chevron.textContent = collapsed ? '▼' : '▶';
+  localStorage.setItem('imp_done_collapsed', collapsed ? '0' : '1');
 }
 
 // --- Open Transaction ---
@@ -930,6 +966,22 @@ function renderOverview(t, cache) {
   const lineItemsTotal = lineItems.reduce((s,li)=>s+parseFloat(li.amount||0),0);
   const intPrice = parseFloat(t.intermediary_price||0);
 
+  // Option C: weighted average buy conversion rate from actual payments
+  // If buy-leg payments have conversion_rate recorded, use weighted avg; else use planned rate
+  const buyPaymentsWithRate = (cache.payments||[]).filter(function(p){
+    return p.leg==='buy' && parseFloat(p.conversion_rate||0) > 0;
+  });
+  let effectiveConvRate, convRateLabel;
+  if (buyPaymentsWithRate.length > 0) {
+    const weightedSum = buyPaymentsWithRate.reduce(function(s,p){ return s + parseFloat(p.amount||0)*parseFloat(p.conversion_rate||0); }, 0);
+    const totalAmt = buyPaymentsWithRate.reduce(function(s,p){ return s + parseFloat(p.amount||0); }, 0);
+    effectiveConvRate = totalAmt > 0 ? weightedSum / totalAmt : 0;
+    convRateLabel = 'Blended rate ('+buyPaymentsWithRate.length+' payment'+(buyPaymentsWithRate.length>1?'s':'')+')';
+  } else {
+    effectiveConvRate = parseFloat(t.buy_conversion_rate||0);
+    convRateLabel = 'Planned rate';
+  }
+
   // Use per-line-item prices when line items exist, else fall back to transaction scalars
   let buyPrice, qty, totalNetMargin, useLineItems = false;
   if (lineItems.length) {
@@ -983,7 +1035,7 @@ function renderOverview(t, cache) {
       '</tr></thead><tbody>' +
       lineItems.map(function(li) {
         const sp = parseFloat(li.price||0), bp = parseFloat(li.buyer_price||0), q = parseFloat(li.qty||0);
-        const convRate = parseFloat(t.buy_conversion_rate||0);
+        const convRate = effectiveConvRate;
         const buyCur = t.buy_currency||'USD', sellCur = t.sell_currency||buyCur;
         const sameCur = buyCur === sellCur;
         // Convert supplier price to sell currency for margin if conv_rate provided and currencies differ
@@ -1033,7 +1085,7 @@ function renderOverview(t, cache) {
       const totBuy = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0)*parseFloat(li.buyer_price||0),0);
       const totQty = lineItems.reduce((s,li)=>s+parseFloat(li.qty||0),0);
       const buyCur = t.buy_currency||'USD', sellCur = t.sell_currency||buyCur;
-      const convRate = parseFloat(t.buy_conversion_rate||0);
+      const convRate = effectiveConvRate;
       const sameCur = buyCur === sellCur;
       const hasBuy = lineItems.some(function(li){ return parseFloat(li.buyer_price||0) > 0; });
       // Convert supplier total to sell currency for net margin calc
@@ -1045,6 +1097,7 @@ function renderOverview(t, cache) {
         '<tr><td style="color:#64748b;padding:3px 0">Total Supplier Value</td><td style="text-align:right;font-weight:700;color:#1e3a5f">'+buyCur+' '+totSup.toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>' +
         lineItems.map(function(li){ return '<tr><td style="color:#94a3b8;padding:2px 0 2px 12px;font-size:11px">'+esc(li.material||'')+'</td><td style="text-align:right;color:#64748b;font-size:11px">'+parseFloat(li.qty||0).toFixed(3).replace(/\.?0+$/,'')+' MT × '+parseFloat(li.price||0).toLocaleString()+' = '+buyCur+' '+(parseFloat(li.qty||0)*parseFloat(li.price||0)).toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>'; }).join('') +
         (!sameCur && !convRate ? '<tr><td colspan="2" style="padding:4px 0;font-size:11px;color:#f59e0b">⚠ Set Conv. Rate (₹ per 1 '+buyCur+') to calculate net margin across currencies</td></tr>' : '') +
+        (!sameCur && convRate ? '<tr><td colspan="2" style="padding:2px 0;font-size:11px;color:#64748b">Rate: ₹'+convRate.toFixed(2)+'/'+buyCur+' ('+convRateLabel+')</td></tr>' : '') +
         (totalCosts && canMargin ?'<tr><td style="color:#64748b;padding:3px 0">− Total Costs</td><td style="text-align:right;color:#ef4444">'+sellCur+' '+(totalCosts*totQty).toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>':'') +
         (canMargin ? '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700">Net Margin ('+totQty.toFixed(3).replace(/\.?0+$/,'')+' MT)</td><td style="text-align:right;font-weight:800;font-size:15px;color:'+(net>=0?'#166534':'#991b1b')+'">'+sellCur+' '+net.toLocaleString(undefined,{maximumFractionDigits:0})+'</td></tr>' : (!hasBuy ? '<tr style="border-top:2px solid #1e3a5f"><td style="padding:6px 0;font-weight:700;color:#94a3b8" colspan="2">Add buyer prices to see margin</td></tr>' : ''));
     })() :
@@ -1092,7 +1145,7 @@ function openAddLineItem() {
   el.innerHTML =
     '<div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px;margin-top:10px">' +
     '<div class="form-grid three" style="margin-bottom:10px">' +
-    '<div class="form-group" style="grid-column:span 2"><label>Material</label><input id="li-material" placeholder="e.g. Copper Scrap Birch" /></div>' +
+    '<div class="form-group" style="grid-column:span 2"><label>Material</label><select id="li-material"><option value="">Select…</option><optgroup label="Copper"><option>Milberry</option><option>Candy</option><option>Birch</option><option>No 1 Copper</option><option>No 2 Copper</option><option>Cathode</option><option>Wire</option><option>Utensil</option><option>Berry</option></optgroup><optgroup label="Brass"><option>Honey</option><option>Label</option><option>Hairwire</option><option>Ebony</option><option>White</option><option>Yellow</option></optgroup><optgroup label="Aluminium"><option>UBC</option><option>Tense</option><option>TT</option><option>Extrusion</option><option>Zorba</option><option>Wire</option><option>TRUMP</option></optgroup><optgroup label="Zinc"><option>Zinc Ingot</option><option>Zinc Die Casting</option></optgroup><optgroup label="Lead"><option>Lead Scrap</option><option>Re-melted Lead</option><option>Lead Ingot</option><option>Dry Battery (Rains)</option></optgroup><optgroup label="Ferrous"><option>Heavy Melting</option><option>Stainless Steel Scrap</option></optgroup><optgroup label="Plastic"><option>HDPE</option><option>PET Flakes</option></optgroup></select></div>' +
     '<div class="form-group"><label>HSN Code</label><input id="li-hsn" placeholder="e.g. 74040012" /></div>' +
     '<div class="form-group"><label>Qty</label><input id="li-qty" type="number" step="0.001" placeholder="0.000" /></div>' +
     '<div class="form-group"><label>Unit</label><select id="li-unit"><option>MT</option><option>KG</option><option>PCS</option><option>LOT</option></select></div>' +
